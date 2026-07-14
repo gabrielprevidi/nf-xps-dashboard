@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+@theme {
+  /* Superfícies e tinta (paleta validada — tema claro único) */
+  --color-page: #f4f4f2;
+  --color-surface: #fcfcfb;
+  --color-ink: #0b0b0b;
+  --color-ink-2: #52514e;
+  --color-ink-3: #898781;
+  --color-hairline: #e1e0d9;
+  --color-baseline: #c3c2b7;
+
+  /* Marca / navegação */
+  --color-navy: #12263f;
+  --color-navy-2: #0b1a2e;
+  --color-navy-3: #1d3a5f;
+
+  /* Série de dados e ação */
+  --color-accent: #2a78d6;
+  --color-accent-deep: #1c5cab;
+  --color-accent-soft: #cde2fb;
+
+  /* Status (reservados) */
+  --color-good: #0ca30c;
+  --color-good-deep: #006300;
+  --color-warn: #fab219;
+  --color-warn-deep: #8a5a00;
+  --color-serious: #ec835a;
+  --color-serious-deep: #9a3d12;
+  --color-critical: #d03b3b;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --shadow-card: 0 1px 2px rgba(11, 11, 11, 0.04), 0 1px 3px rgba(11, 11, 11, 0.06);
+  --shadow-pop: 0 4px 12px rgba(11, 11, 11, 0.10), 0 12px 32px rgba(11, 11, 11, 0.12);
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-page text-ink font-sans antialiased;
+}
+
+/* Cartão padrão */
+.card {
+  @apply bg-surface rounded-xl border border-ink/10 shadow-card;
+}
+
+/* Botões */
+.btn,
+.btn-primary,
+.btn-ghost,
+.btn-danger {
+  @apply inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold
+    transition-colors cursor-pointer select-none disabled:opacity-50 disabled:cursor-not-allowed;
+}
+.btn-primary {
+  @apply bg-accent text-white hover:bg-accent-deep;
+}
+.btn-ghost {
+  @apply bg-transparent text-ink-2 border border-ink/15 hover:bg-ink/5;
+}
+.btn-danger {
+  @apply bg-critical text-white hover:bg-[#b32f2f];
+}
+
+/* Campos de formulário */
+.field {
+  @apply w-full rounded-lg border border-ink/15 bg-white px-3 py-2 text-sm text-ink
+    placeholder:text-ink-3 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent;
+}
+.field-label {
+  @apply block text-xs font-semibold text-ink-2 mb-1;
+}
+
+/* Tabelas */
+.tbl {
+  @apply w-full text-sm;
+}
+.tbl th {
+  @apply text-left text-xs font-semibold text-ink-3 uppercase tracking-wide px-3 py-2 border-b border-hairline whitespace-nowrap;
+}
+.tbl td {
+  @apply px-3 py-2.5 border-b border-hairline/70 align-middle;
+}
+.tbl tbody tr:hover {
+  @apply bg-ink/2;
+}
+
+/* Impressão: só a área de relatório */
+@media print {
+  body {
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-area {
+    display: block !important;
+  }
+}
+.print-area {
+  display: none;
+}

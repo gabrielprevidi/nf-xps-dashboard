@@ -1,0 +1,217 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
+import type { Session } from '@supabase/supabase-js'
+import type { Config, Emitente, Nota, Recebivel, Tomador } from '../domain/types'
+import { supabase } from '../lib/supabase'
+import * as api from '../data/api'
+import { SEED_EMITENTES, SEED_NOTAS, SEED_RECEBIVEIS } from '../data/seed'
+import { normalizeCnpj } from '../lib/format'
+
+interface DataState {
+  session: Session | null
+  authReady: boolean
+  /** modo demonstração: dados de exemplo em memória, nada é salvo */
+  demoMode: boolean
+  enterDemo: () => void
+  loading: boolean
+  error: string | null
+  notas: Nota[]
+  recebiveis: Recebivel[]
+  emitentes: Emitente[]
+  config: Config
+  tomadores: Tomador[]
+  activeTomador: string // 'todos' ou CNPJ normalizado
+  setActiveTomador: (k: string) => void
+  /** notas do cliente ativo (ou todas) */
+  tabNotas: Nota[]
+  reload: () => Promise<void>
+  saveNota: (n: Nota) => Promise<void>
+  removeNota: (numero: number) => Promise<void>
+  importRecebiveis: (rows: Recebivel[]) => Promise<void>
+  updateConfig: (cfg: Config) => Promise<void>
+  signOut: () => Promise<void>
+}
+
+const Ctx = createContext<DataState | null>(null)
+
+export const tomadorKey = (n: Nota): string =>
+  normalizeCnpj(n.tomadorCnpj) || 'sem-cnpj-' + n.tomadorNome
+
+export function computeTomadores(notas: Nota[]): Tomador[] {
+  const map = new Map<string, Tomador>()
+  notas.forEach((n) => {
+    const key = tomadorKey(n)
+    if (!map.has(key)) map.set(key, { key, cnpj: n.tomadorCnpj, nome: n.tomadorNome, count: 0, total: 0 })
+    const e = map.get(key)!
+    e.count++
+    e.total += n.valorTotal
+  })
+  return [...map.values()].sort((a, b) => b.total - a.total)
+}
+
+const DEFAULT_CONFIG: Config = { commissionRate: 4, prazoDias: 10 }
+
+export function DataProvider({ children }: { children: ReactNode }) {
+  const [session, setSession] = useState<Session | null>(null)
+  const [authReady, setAuthReady] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notas, setNotas] = useState<Nota[]>([])
+  const [recebiveis, setRecebiveis] = useState<Recebivel[]>([])
+  const [emitentes, setEmitentes] = useState<Emitente[]>([])
+  const [config, setConfig] = useState<Config>(DEFAULT_CONFIG)
+  const [activeTomador, setActiveTomador] = useState('todos')
+  const [demoMode, setDemoMode] = useState(false)
+
+  const enterDemo = useCallback(() => {
+    setNotas(SEED_NOTAS)
+    setRecebiveis(SEED_RECEBIVEIS)
+    setEmitentes(SEED_EMITENTES)
+    setConfig(DEFAULT_CONFIG)
+    setDemoMode(true)
+  }, [])
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthReady(true)
+      return
+    }
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session)
+      setAuthReady(true)
+    })
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
+    return () => sub.subscription.unsubscribe()
+  }, [])
+
+  const reload = useCallback(async () => {
+    if (!supabase || !session || demoMode) return
+    setLoading(true)
+    setError(null)
+    try {
+      const [n, r, e, c] = await Promise.all([
+        api.fetchNotas(),
+        api.fetchRecebiveis(),
+        api.fetchEmitentes(),
+        api.fetchConfig(),
+      ])
+      setNotas(n)
+      setRecebiveis(r)
+      setEmitentes(e)
+      setConfig(c)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [session])
+
+  useEffect(() => {
+    if (session) void reload()
+  }, [session, reload])
+
+  const saveNota = useCallback(
+    async (n: Nota) => {
+      if (demoMode) {
+        setNotas((prev) => {
+          const map = new Map(prev.map((x) => [x.numero, x]))
+          map.set(n.numero, n)
+          return [...map.values()]
+        })
+        return
+      }
+      await api.upsertNota(n)
+      await reload()
+    },
+    [reload, demoMode],
+  )
+
+  const removeNota = useCallback(
+    async (numero: number) => {
+      if (!demoMode) await api.deleteNota(numero)
+      setNotas((prev) => prev.filter((x) => x.numero !== numero))
+    },
+    [demoMode],
+  )
+
+  const importRecebiveis = useCallback(
+    async (rows: Recebivel[]) => {
+      if (demoMode) {
+        setRecebiveis((prev) => {
+          const map = new Map(prev.map((x) => [x.id, x]))
+          rows.forEach((r) => map.set(r.id, r))
+          return [...map.values()]
+        })
+        return
+      }
+      await api.upsertRecebiveis(rows)
+      setRecebiveis(await api.fetchRecebiveis())
+    },
+    [demoMode],
+  )
+
+  const updateConfig = useCallback(
+    async (cfg: Config) => {
+      if (!demoMode) await api.saveConfig(cfg)
+      setConfig(cfg)
+    },
+    [demoMode],
+  )
+
+  const signOut = useCallback(async () => {
+    if (demoMode) {
+      setDemoMode(false)
+      setNotas([])
+      setRecebiveis([])
+      setEmitentes([])
+      return
+    }
+    await supabase?.auth.signOut()
+    setNotas([])
+    setRecebiveis([])
+  }, [demoMode])
+
+  const tomadores = useMemo(() => computeTomadores(notas), [notas])
+  const tabNotas = useMemo(
+    () => (activeTomador === 'todos' ? notas : notas.filter((n) => tomadorKey(n) === activeTomador)),
+    [notas, activeTomador],
+  )
+
+  const value: DataState = {
+    session,
+    authReady,
+    demoMode,
+    enterDemo,
+    loading,
+    error,
+    notas,
+    recebiveis,
+    emitentes,
+    config,
+    tomadores,
+    activeTomador,
+    setActiveTomador,
+    tabNotas,
+    reload,
+    saveNota,
+    removeNota,
+    importRecebiveis,
+    updateConfig,
+    signOut,
+  }
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>
+}
+
+export function useData(): DataState {
+  const ctx = useContext(Ctx)
+  if (!ctx) throw new Error('useData fora do DataProvider')
+  return ctx
+}
