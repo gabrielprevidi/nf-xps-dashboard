@@ -171,7 +171,7 @@ export function NotaFormModal({
           <label className="inline-flex items-center gap-2 text-sm text-ink-2">
             <input
               type="checkbox"
-              className="size-4 accent-[#2a78d6]"
+              className="size-4 accent-[#c1791f]"
               checked={d.periodoInfo !== false}
               onChange={(e) => set({ periodoInfo: e.target.checked })}
             />
@@ -233,7 +233,7 @@ export function NotaFormModal({
             ) : null}
           </div>
           <div className="flex gap-2">
-            <button type="button" className="btn-ghost" onClick={onClose}>
+            <button type="button" className="btn-cancel" onClick={onClose}>
               Cancelar
             </button>
             <button type="submit" className="btn-primary" disabled={saving}>

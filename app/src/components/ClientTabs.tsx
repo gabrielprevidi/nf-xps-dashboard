@@ -46,7 +46,7 @@ function Tab({
     >
       <span className="max-w-44 truncate">{label}</span>
       <span
-        className={`rounded-full px-1.5 py-px text-[10px] tabular-nums ${
+        className={`rounded-full px-1.5 py-px font-mono text-[10px] tabular-nums ${
           active ? 'bg-white/20' : 'bg-ink/8'
         }`}
       >

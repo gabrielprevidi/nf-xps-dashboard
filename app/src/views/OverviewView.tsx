@@ -47,16 +47,16 @@ export function OverviewView() {
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-3">
         <KpiCard label="Total faturado" value={fmtBRL(totals.total)} sub={`${totals.count} nota(s)`} />
-        <KpiCard label="Impostos totais" value={fmtBRL(totals.taxes)} sub="ISS + IBS + CBS + retenções" />
+        <KpiCard label="Impostos totais" value={fmtBRL(totals.taxes)} sub="ISS + IBS + CBS + retenções" tone="teal" />
         <KpiCard label="Valor líquido" value={fmtBRL(totals.net)} sub="pós-impostos" />
         <KpiCard
           label={`Comissão (${config.commissionRate}%)`}
           value={fmtBRL(totals.commission)}
           sub="indicação sobre o líquido"
-          tone="accent"
+          tone="commission"
         />
         <KpiCard label="Notas emitidas" value={totals.count} />
-        <KpiCard label="Ticket médio" value={fmtBRL(totals.avg)} />
+        <KpiCard label="Ticket médio" value={fmtBRL(totals.avg)} tone="teal" />
         <KpiCard
           label="Meses não cobrados"
           value={pendingMonths.count}
@@ -67,15 +67,15 @@ export function OverviewView() {
                 ? 'nenhum cliente com pendência'
                 : `em dia com a regra de ${config.prazoDias} dias`
           }
-          tone={pendingMonths.count ? 'danger' : undefined}
+          tone={pendingMonths.count ? 'danger' : 'teal'}
         />
       </div>
 
       <div className="card p-5">
         <div className="flex items-baseline justify-between mb-3">
-          <h2 className="text-sm font-bold">Faturamento por período de referência</h2>
-          <span className="text-xs text-ink-3">
-            barras em azul: valor faturado · marcas amarelas na base: mês sem nota
+          <h2 className="heading text-base">Faturamento por período de referência</h2>
+          <span className="font-mono text-[11px] text-ink-3">
+            barras em âmbar: valor faturado · marca vermelha na base: mês sem nota
           </span>
         </div>
         <RevenueChart notas={tabNotas} />
@@ -83,7 +83,7 @@ export function OverviewView() {
 
       {reconSummary.length > 0 && activeTomador === 'todos' && (
         <div className="card p-5">
-          <h2 className="text-sm font-bold mb-1">Conciliação com contas a receber — resumo</h2>
+          <h2 className="heading text-base mb-1">Conciliação com contas a receber — resumo</h2>
           <p className="text-xs text-ink-3 mb-3">
             Detalhe nota a nota na aba Conciliação, selecionando um cliente.
           </p>

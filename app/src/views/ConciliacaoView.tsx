@@ -54,7 +54,7 @@ export function ConciliacaoView() {
         </div>
       ) : activeTomador === 'todos' ? (
         <div className="card p-5">
-          <h2 className="text-sm font-bold mb-1">Resumo por cliente</h2>
+          <h2 className="heading text-base mb-1">Resumo por cliente</h2>
           <p className="text-xs text-ink-3 mb-3">Clique em um cliente para ver o detalhe nota a nota.</p>
           <div className="overflow-x-auto">
             <table className="tbl">
@@ -86,7 +86,7 @@ export function ConciliacaoView() {
       ) : detail ? (
         <>
           <div className="card p-5">
-            <h2 className="text-sm font-bold mb-3">Detalhe nota a nota</h2>
+            <h2 className="heading text-base mb-3">Detalhe nota a nota</h2>
             {detail.rows.length === 0 ? (
               <EmptyState title="Sem notas para este cliente" />
             ) : (
@@ -147,19 +147,20 @@ export function ConciliacaoView() {
           </div>
 
           {detail.orphans.length > 0 && (
-            <div className="card border-warn/50 p-5">
-              <h2 className="text-sm font-bold text-warn-deep mb-2">
-                {detail.orphans.length} lançamento(s) de cobrança sem nota correspondente no painel
-              </h2>
-              <ul className="text-sm text-ink-2 space-y-1">
-                {detail.orphans.map((o) => (
-                  <li key={o.id} className="tabular-nums">
-                    Doc. <b>{o.numDocumento}</b> · {fmtBRL(o.valorTitulo)}
-                    {o.emissao ? ` · emitido em ${dateOnly(o.emissao).toLocaleDateString('pt-BR')}` : ''}
-                    {o.observacoes ? <span className="text-ink-3"> · {o.observacoes}</span> : ''}
-                  </li>
-                ))}
-              </ul>
+            <div className="card p-5">
+              <div className="pt-3 border-t border-dashed border-hairline text-sm text-ink-2">
+                <b className="text-ink">{detail.orphans.length}</b> lançamento(s) de contas a receber sem nota
+                correspondente no painel:
+                <ul className="mt-1.5 space-y-1 list-disc pl-4.5">
+                  {detail.orphans.map((o) => (
+                    <li key={o.id} className="tabular-nums">
+                      Doc. <b>{o.numDocumento}</b> · {fmtBRL(o.valorTitulo)}
+                      {o.emissao ? ` · emitido em ${dateOnly(o.emissao).toLocaleDateString('pt-BR')}` : ''}
+                      {o.observacoes ? <span className="text-ink-3"> · {o.observacoes}</span> : ''}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           )}
         </>

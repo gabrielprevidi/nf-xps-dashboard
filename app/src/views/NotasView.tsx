@@ -1,21 +1,11 @@
 import { useMemo, useState, Fragment } from 'react'
-import {
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  Clock,
-  FilePlus2,
-  FileUp,
-  Pencil,
-  Printer,
-  Trash2,
-} from 'lucide-react'
+import { ChevronDown, ChevronRight, FilePlus2, FileUp, Pencil, Printer, Trash2 } from 'lucide-react'
 import { useData } from '../state/DataContext'
 import type { Nota } from '../domain/types'
 import { commission, netAfterTaxes, taxesTotal, computeTotals } from '../domain/calc'
 import { getDeadlineForNota } from '../domain/prazo'
 import { dateOnly, fmtBRL, fmtDate, fmtDateTime } from '../lib/format'
-import { Badge, EmptyState } from '../components/ui'
+import { EmptyState, Stamp } from '../components/ui'
 import { NotaFormModal, type NotaDraft } from '../components/NotaForm'
 import { PdfImportModal } from '../components/PdfImportModal'
 
@@ -102,15 +92,15 @@ export function NotasView() {
     if (emissao > deadline) {
       const dias = Math.round((emissao.getTime() - deadline.getTime()) / 86400000)
       return (
-        <Badge tone="serious" icon={<Clock size={11} />} title={`Prazo: até ${fmtDate(deadline.toISOString())}`}>
-          {dias}d após o prazo
-        </Badge>
+        <Stamp tone="critical" title={`Prazo: até ${fmtDate(deadline.toISOString())}`}>
+          {dias}d de atraso
+        </Stamp>
       )
     }
     return (
-      <Badge tone="good" icon={<CheckCircle2 size={11} />} title={`Prazo: até ${fmtDate(deadline.toISOString())}`}>
+      <Stamp tone="ok" title={`Prazo: até ${fmtDate(deadline.toISOString())}`}>
         no prazo
-      </Badge>
+      </Stamp>
     )
   }
 
@@ -268,7 +258,7 @@ export function NotasView() {
                   <Fragment key={n.numero}>
                     <tr className="cursor-pointer" onClick={() => setExpanded(open ? null : n.numero)}>
                       <td className="w-8 text-ink-3">{open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}</td>
-                      <td className="font-bold tabular-nums">{n.numero}</td>
+                      <td className="font-display font-bold tabular-nums">{n.numero}</td>
                       {activeTomador === 'todos' && <td className="max-w-44 truncate">{n.tomadorNome}</td>}
                       <td>
                         {n.periodoLabel}
@@ -281,9 +271,9 @@ export function NotasView() {
                       <td className="tabular-nums whitespace-nowrap">{fmtDate(n.dataEmissao)}</td>
                       <td>
                         {n.status === 'autenticada' ? (
-                          <Badge tone="good" icon={<CheckCircle2 size={11} />}>autenticada</Badge>
+                          <Stamp tone="ok">autenticada</Stamp>
                         ) : (
-                          <Badge tone="warn" icon={<Clock size={11} />}>pendente</Badge>
+                          <Stamp tone="critical">pendente</Stamp>
                         )}
                       </td>
                       <td>{prazoBadge(n)}</td>

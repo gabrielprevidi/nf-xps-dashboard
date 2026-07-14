@@ -1,38 +1,49 @@
 @import "tailwindcss";
 
+/* Fontes carregadas via <link> em index.html — @import remoto aqui é descartado pelo bundler do Tailwind (Lightning CSS) */
+
 @theme {
-  /* Superfícies e tinta (paleta validada — tema claro único) */
-  --color-page: #f4f4f2;
-  --color-surface: #fcfcfb;
-  --color-ink: #0b0b0b;
-  --color-ink-2: #52514e;
-  --color-ink-3: #898781;
-  --color-hairline: #e1e0d9;
-  --color-baseline: #c3c2b7;
+  /* Superfícies e tinta — paleta editorial (âmbar/teal/tinta), inspirada no protótipo */
+  --color-page: #edf1ef;
+  --color-surface: #ffffff;
+  --color-ink: #16232b;
+  --color-ink-2: #56666d;
+  --color-ink-3: #8b979b;
+  --color-hairline: #d6ded9;
+  --color-hairline-soft: #e6ece9;
+  --color-baseline: #aebbb5;
 
-  /* Marca / navegação */
-  --color-navy: #12263f;
-  --color-navy-2: #0b1a2e;
-  --color-navy-3: #1d3a5f;
+  /* Marca / navegação (variação escura da tinta) */
+  --color-navy: #16232b;
+  --color-navy-2: #0e171d;
+  --color-navy-3: #223641;
 
-  /* Série de dados e ação */
-  --color-accent: #2a78d6;
-  --color-accent-deep: #1c5cab;
-  --color-accent-soft: #cde2fb;
+  /* Acento primário — âmbar (comissão, ações principais, ênfase) */
+  --color-accent: #c1791f;
+  --color-accent-deep: #a9691a;
+  --color-accent-soft: #f4e3cb;
 
-  /* Status (reservados) */
-  --color-good: #0ca30c;
-  --color-good-deep: #006300;
-  --color-warn: #fab219;
-  --color-warn-deep: #8a5a00;
-  --color-serious: #ec835a;
-  --color-serious-deep: #9a3d12;
-  --color-critical: #d03b3b;
+  /* Secundário — teal (ok / autenticado / no prazo) */
+  --color-good: #2e6b5e;
+  --color-good-deep: #1f4b41;
+  --color-good-soft: #dceae5;
 
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Atenção — âmbar mais suave para "requer atenção" */
+  --color-warn: #c1791f;
+  --color-warn-deep: #8a5716;
+  --color-warn-soft: #f4e3cb;
 
-  --shadow-card: 0 1px 2px rgba(11, 11, 11, 0.04), 0 1px 3px rgba(11, 11, 11, 0.06);
-  --shadow-pop: 0 4px 12px rgba(11, 11, 11, 0.10), 0 12px 32px rgba(11, 11, 11, 0.12);
+  /* Crítico — vermelho (pendente / atrasado / sem cobrança) */
+  --color-critical: #a63d2f;
+  --color-critical-deep: #7c2e23;
+  --color-critical-soft: #f4dcd7;
+
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Space Grotesk", "Inter", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --shadow-card: 0 1px 2px rgba(22, 35, 43, 0.05), 0 1px 3px rgba(22, 35, 43, 0.06);
+  --shadow-pop: 0 4px 12px rgba(22, 35, 43, 0.12), 0 12px 32px rgba(22, 35, 43, 0.14);
 }
 
 html {
@@ -48,10 +59,21 @@ body {
   @apply bg-surface rounded-xl border border-ink/10 shadow-card;
 }
 
+/* Rótulos mono, no espírito de "ficha"/ledger do protótipo */
+.label-mono {
+  @apply font-mono text-[10.5px] font-semibold uppercase tracking-wider text-ink-3;
+}
+
+/* Título em Space Grotesk (display) */
+.heading {
+  @apply font-display font-bold text-ink;
+}
+
 /* Botões */
 .btn,
 .btn-primary,
 .btn-ghost,
+.btn-cancel,
 .btn-danger {
   @apply inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold
     transition-colors cursor-pointer select-none disabled:opacity-50 disabled:cursor-not-allowed;
@@ -60,16 +82,19 @@ body {
   @apply bg-accent text-white hover:bg-accent-deep;
 }
 .btn-ghost {
+  @apply bg-transparent text-good border border-good/50 hover:bg-good hover:text-white;
+}
+.btn-cancel {
   @apply bg-transparent text-ink-2 border border-ink/15 hover:bg-ink/5;
 }
 .btn-danger {
-  @apply bg-critical text-white hover:bg-[#b32f2f];
+  @apply bg-critical text-white hover:bg-critical-deep;
 }
 
 /* Campos de formulário */
 .field {
   @apply w-full rounded-lg border border-ink/15 bg-white px-3 py-2 text-sm text-ink
-    placeholder:text-ink-3 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent;
+    placeholder:text-ink-3 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent;
 }
 .field-label {
   @apply block text-xs font-semibold text-ink-2 mb-1;
@@ -80,13 +105,26 @@ body {
   @apply w-full text-sm;
 }
 .tbl th {
-  @apply text-left text-xs font-semibold text-ink-3 uppercase tracking-wide px-3 py-2 border-b border-hairline whitespace-nowrap;
+  @apply text-left font-mono text-[10.5px] font-semibold text-ink-3 uppercase tracking-wider px-3 py-2 border-b-2 border-ink/80 whitespace-nowrap;
 }
 .tbl td {
-  @apply px-3 py-2.5 border-b border-hairline/70 align-middle;
+  @apply px-3 py-2.5 border-b border-hairline-soft align-middle;
 }
 .tbl tbody tr:hover {
-  @apply bg-ink/2;
+  @apply bg-ink/3;
+}
+
+/* "Carimbo" de status — rotacionado, mono, bordado (assinatura visual do painel original) */
+.stamp {
+  @apply inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-[9.5px] font-bold
+    uppercase tracking-wider border whitespace-nowrap;
+  transform: rotate(-2deg);
+}
+.stamp-ok {
+  @apply text-good border-good bg-good-soft;
+}
+.stamp-critical {
+  @apply text-critical border-critical bg-critical-soft;
 }
 
 /* Impressão: só a área de relatório */

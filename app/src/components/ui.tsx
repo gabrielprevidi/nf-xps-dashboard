@@ -21,7 +21,7 @@ export function Modal({
     >
       <div className={`card w-full ${wide ? 'max-w-4xl' : 'max-w-2xl'} shadow-pop my-auto`}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-hairline">
-          <h2 className="text-base font-bold">{title}</h2>
+          <h2 className="heading text-base">{title}</h2>
           <button className="p-1.5 rounded-lg hover:bg-ink/5 text-ink-2 cursor-pointer" onClick={onClose} aria-label="Fechar">
             <X size={18} />
           </button>
@@ -35,7 +35,6 @@ export function Modal({
 const badgeStyles: Record<string, string> = {
   good: 'bg-good/10 text-good-deep border-good/30',
   warn: 'bg-warn/15 text-warn-deep border-warn/40',
-  serious: 'bg-serious/10 text-serious-deep border-serious/30',
   critical: 'bg-critical/10 text-critical border-critical/30',
   neutral: 'bg-ink/5 text-ink-2 border-ink/15',
   accent: 'bg-accent/10 text-accent-deep border-accent/25',
@@ -63,6 +62,15 @@ export function Badge({
   )
 }
 
+/** "Carimbo" rotacionado — para status binários de destaque (autenticada/pendente, no prazo/atrasado) */
+export function Stamp({ tone, children, title }: { tone: 'ok' | 'critical'; children: ReactNode; title?: string }) {
+  return (
+    <span title={title} className={`stamp ${tone === 'ok' ? 'stamp-ok' : 'stamp-critical'}`}>
+      {children}
+    </span>
+  )
+}
+
 export function KpiCard({
   label,
   value,
@@ -72,18 +80,23 @@ export function KpiCard({
   label: string
   value: ReactNode
   sub?: ReactNode
-  tone?: 'danger' | 'accent'
+  /** default = âmbar · teal = métrica secundária · commission = destaque âmbar forte · danger = alerta vermelho */
+  tone?: 'default' | 'teal' | 'commission' | 'danger'
 }) {
+  const border =
+    tone === 'danger'
+      ? 'border-l-critical bg-critical/4 border-critical/30'
+      : tone === 'commission'
+        ? 'border-l-accent bg-accent-soft/60 border-accent/30'
+        : tone === 'teal'
+          ? 'border-l-good'
+          : 'border-l-accent'
+  const valueColor =
+    tone === 'danger' ? 'text-critical' : tone === 'commission' ? 'text-accent-deep' : 'text-ink'
   return (
-    <div className={`card p-4 ${tone === 'danger' ? 'border-critical/40 bg-critical/3' : ''}`}>
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">{label}</div>
-      <div
-        className={`mt-1 text-xl font-bold tabular-nums ${
-          tone === 'danger' ? 'text-critical' : tone === 'accent' ? 'text-accent-deep' : 'text-ink'
-        }`}
-      >
-        {value}
-      </div>
+    <div className={`card border-l-4 p-4 ${border}`}>
+      <div className="label-mono">{label}</div>
+      <div className={`mt-1.5 font-display text-xl font-bold tabular-nums ${valueColor}`}>{value}</div>
       {sub ? <div className="mt-0.5 text-xs text-ink-2 leading-snug">{sub}</div> : null}
     </div>
   )

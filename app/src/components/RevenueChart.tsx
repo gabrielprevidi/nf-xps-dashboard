@@ -110,14 +110,21 @@ export function RevenueChart({ notas }: { notas: Nota[] }) {
         {/* grid */}
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={PAD_L} x2={W - PAD_R} y1={yv(t)} y2={yv(t)} stroke="#e1e0d9" strokeWidth={1} />
-            <text x={PAD_L - 8} y={yv(t) + 3.5} textAnchor="end" fontSize={10.5} fill="#898781">
+            <line x1={PAD_L} x2={W - PAD_R} y1={yv(t)} y2={yv(t)} stroke="#d6ded9" strokeWidth={1} />
+            <text
+              x={PAD_L - 8}
+              y={yv(t) + 3.5}
+              textAnchor="end"
+              fontSize={10.5}
+              fontFamily="'IBM Plex Mono', monospace"
+              fill="#8b979b"
+            >
               {t === 0 ? '0' : fmtShort(t)}
             </text>
           </g>
         ))}
         {/* baseline */}
-        <line x1={PAD_L} x2={W - PAD_R} y1={yv(0)} y2={yv(0)} stroke="#c3c2b7" strokeWidth={1} />
+        <line x1={PAD_L} x2={W - PAD_R} y1={yv(0)} y2={yv(0)} stroke="#aebbb5" strokeWidth={1} />
 
         {buckets.map((b, i) => {
           const bx = x(i)
@@ -136,22 +143,15 @@ export function RevenueChart({ notas }: { notas: Nota[] }) {
                 onMouseLeave={() => setHover(null)}
               />
               {b.count === 0 ? (
-                // lacuna: marcador de mês sem nota
+                // lacuna: marcador vermelho de mês sem nota (problema a resolver)
                 <g pointerEvents="none">
-                  <rect
-                    x={bx}
-                    y={yv(0) - 3}
-                    width={barW}
-                    height={3}
-                    fill="#fab219"
-                    opacity={0.9}
-                  />
+                  <rect x={bx} y={yv(0) - 3} width={barW} height={3} fill="#a63d2f" opacity={0.9} />
                 </g>
               ) : (
                 <path
                   pointerEvents="none"
                   d={`M ${bx} ${yv(0)} L ${bx} ${by + 4} Q ${bx} ${by} ${bx + 4} ${by} L ${bx + barW - 4} ${by} Q ${bx + barW} ${by} ${bx + barW} ${by + 4} L ${bx + barW} ${yv(0)} Z`}
-                  fill={b.semPeriodo ? '#86b6ef' : isHover ? '#1c5cab' : '#2a78d6'}
+                  fill={b.semPeriodo ? '#dba368' : isHover ? '#a9691a' : '#c1791f'}
                 />
               )}
               {(n <= 14 || i % 2 === 0) && (
@@ -161,7 +161,8 @@ export function RevenueChart({ notas }: { notas: Nota[] }) {
                   y={H - 12}
                   textAnchor="middle"
                   fontSize={10.5}
-                  fill={hover === i ? '#0b0b0b' : '#898781'}
+                  fontFamily="'IBM Plex Mono', monospace"
+                  fill={hover === i ? '#16232b' : '#8b979b'}
                   fontWeight={hover === i ? 700 : 400}
                 >
                   {b.label}
@@ -181,9 +182,9 @@ export function RevenueChart({ notas }: { notas: Nota[] }) {
             transform: 'translateX(-50%)',
           }}
         >
-          <div className="font-bold mb-0.5">{h.label}</div>
+          <div className="font-display font-bold mb-0.5">{h.label}</div>
           {h.count === 0 ? (
-            <div className="text-warn-deep font-semibold">Nenhuma nota neste mês</div>
+            <div className="text-critical font-semibold">Nenhuma nota neste mês</div>
           ) : (
             <>
               <div className="tabular-nums">

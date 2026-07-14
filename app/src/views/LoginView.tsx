@@ -24,7 +24,7 @@ export function SetupView() {
   const { enterDemo } = useData()
   return (
     <Shell>
-      <h2 className="font-bold mb-2">Conexão com o banco pendente</h2>
+      <h2 className="heading text-base mb-2">Conexão com o banco pendente</h2>
       <p className="text-sm text-ink-2 leading-relaxed">
         As credenciais do Supabase ainda não foram configuradas. Crie o arquivo{' '}
         <code className="bg-ink/6 px-1 rounded text-[12px]">app/.env.local</code> com:

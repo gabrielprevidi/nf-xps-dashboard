@@ -106,7 +106,7 @@ export function CsvImportModal({ onClose }: { onClose: () => void }) {
                 <b className="tabular-nums">{fmtBRL(preview.reduce((s, r) => s + r.valorTitulo, 0))}</b>
               </div>
               <div className="mt-3 flex justify-end gap-2">
-                <button className="btn-ghost" onClick={() => setPreview(null)}>
+                <button className="btn-cancel" onClick={() => setPreview(null)}>
                   Cancelar
                 </button>
                 <button className="btn-primary" onClick={() => void confirm()} disabled={busy}>

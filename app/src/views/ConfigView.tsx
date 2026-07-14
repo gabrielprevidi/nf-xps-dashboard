@@ -29,7 +29,7 @@ export function ConfigView() {
   return (
     <div className="space-y-4 max-w-2xl">
       <form onSubmit={save} className="card p-5 space-y-4">
-        <h2 className="text-sm font-bold">Regras de negócio</h2>
+        <h2 className="heading text-base">Regras de negócio</h2>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="field-label">Taxa de comissão de indicação (%)</label>
@@ -51,7 +51,7 @@ export function ConfigView() {
       </form>
 
       <div className="card p-5">
-        <h2 className="text-sm font-bold mb-3">Emitentes (filiais)</h2>
+        <h2 className="heading text-base mb-3">Emitentes (filiais)</h2>
         <ul className="space-y-2">
           {emitentes.map((e) => (
             <li key={e.id} className="flex items-baseline justify-between gap-3 text-sm border-b border-hairline/70 pb-2 last:border-0">
