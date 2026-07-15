@@ -70,6 +70,7 @@ export const SEED_NOTAS: Nota[] = [
 ]
 
 const REC_BASE = {
+  importacaoId: null,
   cnpjFilial: '32771162000462',
   filial: 'XPS LOG LTDA - VINHEDO',
   cnpjCliente: '61178630000145',

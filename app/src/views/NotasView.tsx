@@ -1,7 +1,18 @@
 import { useMemo, useState, Fragment } from 'react'
-import { ChevronDown, ChevronRight, FilePlus2, FileUp, Pencil, Printer, Trash2 } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronDown,
+  ChevronRight,
+  FilePlus2,
+  FileUp,
+  Pencil,
+  Printer,
+  Trash2,
+} from 'lucide-react'
 import { useData, tomadorKey } from '../state/DataContext'
-import type { Nota } from '../domain/types'
+import type { Nota, Recebivel } from '../domain/types'
 import { commission, netAfterTaxes, taxesTotal, computeTotals } from '../domain/calc'
 import { getDeadlineForNota } from '../domain/prazo'
 import { dateOnly, fmtBRL, fmtDate, fmtDateTime } from '../lib/format'
@@ -9,14 +20,44 @@ import { EmptyState, Stamp } from '../components/ui'
 import { NotaFormModal, type NotaDraft } from '../components/NotaForm'
 import { PdfImportModal } from '../components/PdfImportModal'
 
-type SortKey =
-  | 'emissao_desc'
-  | 'emissao_asc'
-  | 'periodo_asc'
-  | 'periodo_desc'
-  | 'valor_desc'
-  | 'valor_asc'
-  | 'nota_asc'
+type SortColumn =
+  | 'numero'
+  | 'cliente'
+  | 'periodo'
+  | 'emissao'
+  | 'status'
+  | 'prazo'
+  | 'valor'
+  | 'impostos'
+  | 'liquido'
+  | 'comissao'
+
+interface SortState {
+  column: SortColumn
+  dir: 'asc' | 'desc'
+}
+
+const DEFAULT_DIR: Record<SortColumn, 'asc' | 'desc'> = {
+  numero: 'asc',
+  cliente: 'asc',
+  periodo: 'desc',
+  emissao: 'desc',
+  status: 'asc',
+  prazo: 'desc',
+  valor: 'desc',
+  impostos: 'desc',
+  liquido: 'desc',
+  comissao: 'desc',
+}
+
+/** -1 = sem prazo apurável · 0 = dentro do prazo · N = dias de atraso */
+function prazoSortValue(n: Nota, recebiveis: Recebivel[], prazoDias: number): number {
+  const deadline = getDeadlineForNota(n, recebiveis, prazoDias)
+  if (!deadline) return -1
+  const emissao = dateOnly(n.dataEmissao.slice(0, 10))
+  if (emissao <= deadline) return 0
+  return Math.round((emissao.getTime() - deadline.getTime()) / 86400000)
+}
 
 export function NotasView() {
   const { tabNotas, recebiveis, config, removeNota, activeTomador, emitentes, commissionRateFor } = useData()
@@ -26,7 +67,7 @@ export function NotasView() {
   const [servico, setServico] = useState('todos')
   const [min, setMin] = useState('')
   const [max, setMax] = useState('')
-  const [sort, setSort] = useState<SortKey>('periodo_desc')
+  const [sort, setSort] = useState<SortState>({ column: 'periodo', dir: 'desc' })
   const [periodOff, setPeriodOff] = useState<Set<string>>(new Set())
   const [expanded, setExpanded] = useState<number | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
@@ -62,31 +103,44 @@ export function NotasView() {
       }
       return true
     })
+    const dir = sort.dir === 'asc' ? 1 : -1
     list.sort((a, b) => {
-      switch (sort) {
-        case 'emissao_desc':
-          return new Date(b.dataEmissao).getTime() - new Date(a.dataEmissao).getTime()
-        case 'emissao_asc':
-          return new Date(a.dataEmissao).getTime() - new Date(b.dataEmissao).getTime()
-        case 'periodo_asc':
-          return a.sortDate.localeCompare(b.sortDate)
-        case 'periodo_desc':
-          return b.sortDate.localeCompare(a.sortDate)
-        case 'valor_desc':
-          return b.valorTotal - a.valorTotal
-        case 'valor_asc':
-          return a.valorTotal - b.valorTotal
-        case 'nota_asc':
-          return a.numero - b.numero
+      switch (sort.column) {
+        case 'numero':
+          return (a.numero - b.numero) * dir
+        case 'cliente':
+          return a.tomadorNome.localeCompare(b.tomadorNome) * dir
+        case 'periodo':
+          return a.sortDate.localeCompare(b.sortDate) * dir
+        case 'emissao':
+          return (new Date(a.dataEmissao).getTime() - new Date(b.dataEmissao).getTime()) * dir
+        case 'status':
+          return a.status.localeCompare(b.status) * dir
+        case 'prazo':
+          return (prazoSortValue(a, recebiveis, config.prazoDias) - prazoSortValue(b, recebiveis, config.prazoDias)) * dir
+        case 'valor':
+          return (a.valorTotal - b.valorTotal) * dir
+        case 'impostos':
+          return (taxesTotal(a) - taxesTotal(b)) * dir
+        case 'liquido':
+          return (netAfterTaxes(a) - netAfterTaxes(b)) * dir
+        case 'comissao':
+          return (
+            (commission(a, commissionRateFor(tomadorKey(a))) - commission(b, commissionRateFor(tomadorKey(b)))) * dir
+          )
       }
     })
     return list
-  }, [tabNotas, search, status, servico, min, max, sort, periodOff])
+  }, [tabNotas, search, status, servico, min, max, sort, periodOff, recebiveis, config.prazoDias, commissionRateFor])
 
   const totals = useMemo(
     () => computeTotals(filtered, (n) => commissionRateFor(tomadorKey(n))),
     [filtered, commissionRateFor],
   )
+
+  function toggleSort(column: SortColumn) {
+    setSort((prev) => (prev.column === column ? { column, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { column, dir: DEFAULT_DIR[column] }))
+  }
 
   function prazoBadge(n: Nota) {
     const deadline = getDeadlineForNota(n, recebiveis, config.prazoDias)
@@ -144,7 +198,7 @@ export function NotasView() {
 
       {/* Filtros */}
       <div className="no-print card p-4 space-y-3">
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2.5">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2.5">
           <div className="col-span-2">
             <label className="field-label">Buscar</label>
             <input
@@ -180,18 +234,6 @@ export function NotasView() {
               <input className="field tabular-nums" type="number" placeholder="máx" value={max} onChange={(e) => setMax(e.target.value)} />
             </div>
           </div>
-          <div>
-            <label className="field-label">Ordenar por</label>
-            <select className="field" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-              <option value="periodo_desc">Período (recente)</option>
-              <option value="periodo_asc">Período (antigo)</option>
-              <option value="emissao_desc">Emissão (recente)</option>
-              <option value="emissao_asc">Emissão (antiga)</option>
-              <option value="valor_desc">Maior valor</option>
-              <option value="valor_asc">Menor valor</option>
-              <option value="nota_asc">Nº da nota</option>
-            </select>
-          </div>
         </div>
 
         {uniquePeriods.length > 1 && (
@@ -220,9 +262,18 @@ export function NotasView() {
                 </button>
               )
             })}
+            <span className="text-ink-3 text-[11px]">·</span>
             {periodOff.size > 0 && (
               <button className="text-[11px] font-semibold text-accent-deep underline cursor-pointer" onClick={() => setPeriodOff(new Set())}>
-                todos
+                marcar todos
+              </button>
+            )}
+            {periodOff.size < uniquePeriods.length && (
+              <button
+                className="text-[11px] font-semibold text-ink-3 underline cursor-pointer"
+                onClick={() => setPeriodOff(new Set(uniquePeriods))}
+              >
+                limpar
               </button>
             )}
           </div>
@@ -241,16 +292,16 @@ export function NotasView() {
             <thead>
               <tr>
                 <th></th>
-                <th>Nº</th>
-                {activeTomador === 'todos' && <th>Cliente</th>}
-                <th>Período</th>
-                <th>Emissão</th>
-                <th>Status</th>
-                <th>Prazo</th>
-                <th className="text-right!">Valor</th>
-                <th className="text-right!">Impostos</th>
-                <th className="text-right!">Líquido</th>
-                <th className="text-right!">Comissão</th>
+                <SortTh label="Nº" column="numero" sort={sort} onSort={toggleSort} />
+                {activeTomador === 'todos' && <SortTh label="Cliente" column="cliente" sort={sort} onSort={toggleSort} />}
+                <SortTh label="Período" column="periodo" sort={sort} onSort={toggleSort} />
+                <SortTh label="Emissão" column="emissao" sort={sort} onSort={toggleSort} />
+                <SortTh label="Status" column="status" sort={sort} onSort={toggleSort} />
+                <SortTh label="Prazo" column="prazo" sort={sort} onSort={toggleSort} />
+                <SortTh label="Valor" column="valor" sort={sort} onSort={toggleSort} align="right" />
+                <SortTh label="Impostos" column="impostos" sort={sort} onSort={toggleSort} align="right" />
+                <SortTh label="Líquido" column="liquido" sort={sort} onSort={toggleSort} align="right" />
+                <SortTh label="Comissão" column="comissao" sort={sort} onSort={toggleSort} align="right" />
                 <th></th>
               </tr>
             </thead>
@@ -385,6 +436,44 @@ export function NotasView() {
         />
       )}
     </div>
+  )
+}
+
+/** Cabeçalho de coluna clicável para ordenar a lista de notas. */
+function SortTh({
+  label,
+  column,
+  sort,
+  onSort,
+  align,
+}: {
+  label: string
+  column: SortColumn
+  sort: SortState
+  onSort: (c: SortColumn) => void
+  align?: 'right'
+}) {
+  const active = sort.column === column
+  return (
+    <th className={align === 'right' ? 'text-right!' : ''}>
+      <button
+        onClick={() => onSort(column)}
+        className={`inline-flex items-center gap-1 cursor-pointer hover:text-ink ${
+          align === 'right' ? 'flex-row-reverse' : ''
+        } ${active ? 'text-ink' : ''}`}
+      >
+        {label}
+        {active ? (
+          sort.dir === 'asc' ? (
+            <ArrowUp size={11} />
+          ) : (
+            <ArrowDown size={11} />
+          )
+        ) : (
+          <ArrowUpDown size={11} className="opacity-30" />
+        )}
+      </button>
+    </th>
   )
 }
 

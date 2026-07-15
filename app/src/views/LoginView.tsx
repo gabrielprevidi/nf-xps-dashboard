@@ -7,9 +7,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-navy-2 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center size-12 rounded-xl bg-accent text-white font-black text-lg">
-            XPS
-          </div>
+          <img src="/logo.png" alt="XPS LOG" className="mx-auto h-16 w-auto" />
           <h1 className="mt-3 text-white text-xl font-bold">Painel de Notas Fiscais</h1>
           <p className="text-white/60 text-sm">XPS LOG · faturamento, comissão e conciliação</p>
         </div>

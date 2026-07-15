@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import type { Cliente, Config, Emitente, Nota, Recebivel } from '../domain/types'
+import type { Cliente, Config, Emitente, ImportLote, Nota, Recebivel } from '../domain/types'
 import { formatCnpj, normalizeCnpj } from '../lib/format'
 
 function db() {
@@ -79,6 +79,7 @@ export async function fetchRecebiveis(): Promise<Recebivel[]> {
   if (error) throw error
   return (data ?? []).map((r) => ({
     id: r.id,
+    importacaoId: r.importacao_id ?? null,
     cnpjFilial: r.cnpj_filial ?? '',
     filial: r.filial ?? '',
     cnpjCliente: r.cnpj_cliente ?? '',
@@ -124,6 +125,20 @@ export async function fetchClientes(): Promise<Cliente[]> {
     nome: c.nome,
     cnpj: c.cnpj,
     commissionRate: c.commission_rate != null ? Number(c.commission_rate) : null,
+  }))
+}
+
+export async function fetchImportLotes(): Promise<ImportLote[]> {
+  const { data, error } = await db()
+    .from('importacoes_recebiveis')
+    .select('*')
+    .order('importado_em', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((l) => ({
+    id: l.id,
+    nomeArquivo: l.nome_arquivo,
+    totalLinhas: Number(l.total_linhas),
+    importadoEm: l.importado_em,
   }))
 }
 
@@ -191,11 +206,29 @@ export async function deleteNota(numero: number): Promise<void> {
   if (error) throw error
 }
 
-/** Merge por Sequência (id) — reimportar não duplica */
-export async function upsertRecebiveis(rows: Recebivel[]): Promise<void> {
+/** Cria o registro do lote de importação e devolve o id, para marcar as linhas do CSV. */
+export async function createImportLote(nomeArquivo: string, totalLinhas: number): Promise<string> {
+  const { data, error } = await db()
+    .from('importacoes_recebiveis')
+    .insert({ nome_arquivo: nomeArquivo, total_linhas: totalLinhas })
+    .select('id')
+    .single()
+  if (error) throw error
+  return data.id
+}
+
+/** Exclui o lote inteiro — os lançamentos ainda vinculados a ele saem junto (ON DELETE CASCADE). */
+export async function deleteImportLote(id: string): Promise<void> {
+  const { error } = await db().from('importacoes_recebiveis').delete().eq('id', id)
+  if (error) throw error
+}
+
+/** Merge por Sequência (id) — reimportar não duplica. `loteId` marca a quem pertence o envio atual. */
+export async function upsertRecebiveis(rows: Recebivel[], loteId: string): Promise<void> {
   if (!rows.length) return
   const payload = rows.map((r) => ({
     id: r.id,
+    importacao_id: loteId,
     cnpj_filial: r.cnpjFilial,
     filial: r.filial,
     cnpj_cliente: r.cnpjCliente,

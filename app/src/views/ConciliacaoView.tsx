@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react'
-import { FileSpreadsheet, Info } from 'lucide-react'
+import { FileSpreadsheet, Info, Trash2 } from 'lucide-react'
 import { useData } from '../state/DataContext'
 import { buildReconciliation, buildReconciliationSummaryAll } from '../domain/reconciliation'
-import { fmtBRL, fmtDate, dateOnly } from '../lib/format'
+import { fmtBRL, fmtDate, fmtDateTime, dateOnly } from '../lib/format'
 import { Badge, EmptyState } from '../components/ui'
 import { CsvImportModal } from '../components/CsvImportModal'
 
 export function ConciliacaoView() {
-  const { notas, tabNotas, recebiveis, config, tomadores, activeTomador, setActiveTomador } = useData()
+  const { notas, tabNotas, recebiveis, importLotes, config, tomadores, activeTomador, setActiveTomador, removeImportLote } =
+    useData()
   const [showImport, setShowImport] = useState(false)
+  const [confirmDeleteLote, setConfirmDeleteLote] = useState<string | null>(null)
 
   const summary = useMemo(
     () =>
@@ -44,6 +46,58 @@ export function ConciliacaoView() {
           <b>Sem cobrança</b> = nota emitida sem título correspondente.
         </span>
       </div>
+
+      {importLotes.length > 0 && (
+        <div className="card p-5">
+          <h2 className="heading text-base mb-1">Arquivos importados</h2>
+          <p className="text-xs text-ink-3 mb-3">
+            Excluir um arquivo remove os lançamentos que ele trouxe e que ainda não foram substituídos por uma
+            importação mais recente.
+          </p>
+          <ul className="space-y-2">
+            {importLotes.map((lote) => {
+              const vigentes = recebiveis.filter((r) => r.importacaoId === lote.id).length
+              const confirming = confirmDeleteLote === lote.id
+              return (
+                <li
+                  key={lote.id}
+                  className="flex items-center justify-between gap-3 text-sm border-b border-hairline/70 pb-2 last:border-0"
+                >
+                  <div className="min-w-0">
+                    <div className="font-semibold truncate">{lote.nomeArquivo}</div>
+                    <div className="text-xs text-ink-3 tabular-nums">
+                      {fmtDateTime(lote.importadoEm)} · {lote.totalLinhas} linha(s) no arquivo ·{' '}
+                      {vigentes} ainda vigente(s)
+                    </div>
+                  </div>
+                  {confirming ? (
+                    <button
+                      className="btn-danger px-2.5 py-1.5 text-xs shrink-0"
+                      onClick={() => {
+                        void removeImportLote(lote.id)
+                        setConfirmDeleteLote(null)
+                      }}
+                    >
+                      Confirmar exclusão?
+                    </button>
+                  ) : (
+                    <button
+                      className="p-1.5 rounded hover:bg-critical/10 text-critical cursor-pointer shrink-0"
+                      title="Excluir este arquivo importado"
+                      onClick={() => {
+                        setConfirmDeleteLote(lote.id)
+                        setTimeout(() => setConfirmDeleteLote((c) => (c === lote.id ? null : c)), 3000)
+                      }}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
 
       {recebiveis.length === 0 ? (
         <div className="card">

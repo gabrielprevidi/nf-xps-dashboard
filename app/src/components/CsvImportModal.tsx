@@ -43,7 +43,7 @@ export function CsvImportModal({ onClose }: { onClose: () => void }) {
     setBusy(true)
     setError(null)
     try {
-      await importRecebiveis(preview)
+      await importRecebiveis(preview, fileName)
       setDone(preview.length)
       setPreview(null)
     } catch (err) {

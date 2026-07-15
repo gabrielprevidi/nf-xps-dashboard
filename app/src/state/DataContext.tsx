@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import type { Cliente, Config, Emitente, Nota, Recebivel, Tomador } from '../domain/types'
+import type { Cliente, Config, Emitente, ImportLote, Nota, Recebivel, Tomador } from '../domain/types'
 import { supabase } from '../lib/supabase'
 import * as api from '../data/api'
 import { SEED_CLIENTES, SEED_EMITENTES, SEED_NOTAS, SEED_RECEBIVEIS } from '../data/seed'
@@ -24,6 +24,7 @@ interface DataState {
   error: string | null
   notas: Nota[]
   recebiveis: Recebivel[]
+  importLotes: ImportLote[]
   emitentes: Emitente[]
   clientes: Cliente[]
   config: Config
@@ -39,7 +40,10 @@ interface DataState {
   reload: () => Promise<void>
   saveNota: (n: Nota) => Promise<void>
   removeNota: (numero: number) => Promise<void>
-  importRecebiveis: (rows: Recebivel[]) => Promise<void>
+  /** importa um CSV como um novo lote, identificado pelo nome do arquivo */
+  importRecebiveis: (rows: Recebivel[], nomeArquivo: string) => Promise<void>
+  /** exclui um lote de importação inteiro (e os lançamentos ainda vinculados a ele) */
+  removeImportLote: (id: string) => Promise<void>
   updateConfig: (cfg: Config) => Promise<void>
   signOut: () => Promise<void>
 }
@@ -70,6 +74,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [notas, setNotas] = useState<Nota[]>([])
   const [recebiveis, setRecebiveis] = useState<Recebivel[]>([])
+  const [importLotes, setImportLotes] = useState<ImportLote[]>([])
   const [emitentes, setEmitentes] = useState<Emitente[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG)
@@ -103,15 +108,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     setError(null)
     try {
-      const [n, r, e, cli, c] = await Promise.all([
+      const [n, r, lotes, e, cli, c] = await Promise.all([
         api.fetchNotas(),
         api.fetchRecebiveis(),
+        api.fetchImportLotes(),
         api.fetchEmitentes(),
         api.fetchClientes(),
         api.fetchConfig(),
       ])
       setNotas(n)
       setRecebiveis(r)
+      setImportLotes(lotes)
       setEmitentes(e)
       setClientes(cli)
       setConfig(c)
@@ -151,17 +158,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
   )
 
   const importRecebiveis = useCallback(
-    async (rows: Recebivel[]) => {
+    async (rows: Recebivel[], nomeArquivo: string) => {
       if (demoMode) {
+        const loteId = 'demo-lote-' + Date.now()
+        const tagged = rows.map((r) => ({ ...r, importacaoId: loteId }))
         setRecebiveis((prev) => {
           const map = new Map(prev.map((x) => [x.id, x]))
-          rows.forEach((r) => map.set(r.id, r))
+          tagged.forEach((r) => map.set(r.id, r))
           return [...map.values()]
         })
+        setImportLotes((prev) => [
+          { id: loteId, nomeArquivo, totalLinhas: rows.length, importadoEm: new Date().toISOString() },
+          ...prev,
+        ])
         return
       }
-      await api.upsertRecebiveis(rows)
+      const loteId = await api.createImportLote(nomeArquivo, rows.length)
+      await api.upsertRecebiveis(rows, loteId)
       setRecebiveis(await api.fetchRecebiveis())
+      setImportLotes(await api.fetchImportLotes())
+    },
+    [demoMode],
+  )
+
+  const removeImportLote = useCallback(
+    async (id: string) => {
+      if (!demoMode) await api.deleteImportLote(id)
+      setImportLotes((prev) => prev.filter((l) => l.id !== id))
+      setRecebiveis((prev) => prev.filter((r) => r.importacaoId !== id))
     },
     [demoMode],
   )
@@ -192,6 +216,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setDemoMode(false)
       setNotas([])
       setRecebiveis([])
+      setImportLotes([])
       setEmitentes([])
       setClientes([])
       return
@@ -199,6 +224,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     await supabase?.auth.signOut()
     setNotas([])
     setRecebiveis([])
+    setImportLotes([])
   }, [demoMode])
 
   const tomadores = useMemo(() => computeTomadores(notas), [notas])
@@ -224,6 +250,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     error,
     notas,
     recebiveis,
+    importLotes,
     emitentes,
     clientes,
     config,
@@ -237,6 +264,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     saveNota,
     removeNota,
     importRecebiveis,
+    removeImportLote,
     updateConfig,
     signOut,
   }

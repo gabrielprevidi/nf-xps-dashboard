@@ -28,6 +28,8 @@ export interface Nota {
 
 export interface Recebivel {
   id: string // "Sequência" do CSV
+  /** lote de importação (arquivo CSV) a que este lançamento pertence atualmente */
+  importacaoId: string | null
   cnpjFilial: string
   filial: string
   cnpjCliente: string // só dígitos
@@ -50,6 +52,14 @@ export interface Recebivel {
   contaContabil: string
   status: string
   emailFatura: string
+}
+
+/** Um envio de CSV de contas a receber — permite excluir o lote inteiro depois. */
+export interface ImportLote {
+  id: string
+  nomeArquivo: string
+  totalLinhas: number
+  importadoEm: string // ISO datetime
 }
 
 export interface Emitente {

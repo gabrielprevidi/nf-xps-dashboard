@@ -41,14 +41,11 @@ function Layout() {
       {/* Sidebar */}
       <aside className="no-print w-56 shrink-0 bg-navy-2 text-white flex flex-col">
         <div className="px-4 py-5 flex items-center gap-2.5">
-          <div className="size-9 rounded-lg bg-accent flex items-center justify-center font-display font-bold text-sm">
-            XPS
-          </div>
-          <div>
-            <div className="font-display font-bold text-sm leading-tight">XPS LOG</div>
-            <div className="font-mono text-[10px] uppercase tracking-wider text-accent leading-tight">
-              Painel de NFS-e
-            </div>
+          <img src="/logo.png" alt="XPS LOG" className="h-10 w-auto shrink-0" />
+          <div className="font-mono text-[10px] uppercase tracking-wider text-accent leading-tight">
+            Painel de
+            <br />
+            NFS-e
           </div>
         </div>
         <nav className="px-2.5 space-y-1 flex-1">

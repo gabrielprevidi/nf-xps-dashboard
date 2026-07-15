@@ -31,6 +31,7 @@ export function parseReceivablesCsv(text: string): Recebivel[] {
       const digits = docRaw.replace(/\D/g, '')
       return {
         id: cleanExcelValue(row['Sequência']) || 'r' + idx + '-' + Date.now(),
+        importacaoId: null, // atribuído no momento da importação
         cnpjFilial: normalizeCnpj(cleanExcelValue(row['CNPJ Filial'])),
         filial: cleanExcelValue(row['Filial']),
         cnpjCliente: normalizeCnpj(cleanExcelValue(row['CNPJ Cliente'])),

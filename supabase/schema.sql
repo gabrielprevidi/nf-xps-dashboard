@@ -92,6 +92,21 @@ create table if not exists public.contas_receber (
 create index if not exists idx_cr_doc_digits on public.contas_receber (num_documento_digits);
 create index if not exists idx_cr_cnpj_cliente on public.contas_receber (cnpj_cliente);
 
+-- ---------- IMPORTAÇÕES DE CONTAS A RECEBER (lotes de CSV enviados) ----------
+-- Permite excluir um envio inteiro depois (ex.: subiu o arquivo errado).
+create table if not exists public.importacoes_recebiveis (
+  id           uuid primary key default gen_random_uuid(),
+  nome_arquivo text not null,
+  total_linhas int not null default 0,
+  importado_em timestamptz not null default now()
+);
+
+-- idempotente: garante a coluna/índice em bancos já criados antes desta alteração
+alter table public.contas_receber
+  add column if not exists importacao_id uuid references public.importacoes_recebiveis(id) on delete cascade;
+
+create index if not exists idx_cr_importacao on public.contas_receber (importacao_id);
+
 -- ---------- CONFIGURAÇÕES (linha única) ----------
 create table if not exists public.configuracoes (
   id              int primary key default 1 check (id = 1),
@@ -119,16 +134,17 @@ create trigger trg_config_updated before update on public.configuracoes
   for each row execute function public.set_updated_at();
 
 -- ---------- SEGURANÇA (RLS): somente usuários logados ----------
-alter table public.emitentes      enable row level security;
-alter table public.clientes       enable row level security;
-alter table public.notas_fiscais  enable row level security;
-alter table public.contas_receber enable row level security;
-alter table public.configuracoes  enable row level security;
+alter table public.emitentes             enable row level security;
+alter table public.clientes              enable row level security;
+alter table public.notas_fiscais         enable row level security;
+alter table public.contas_receber        enable row level security;
+alter table public.importacoes_recebiveis enable row level security;
+alter table public.configuracoes         enable row level security;
 
 do $$
 declare t text;
 begin
-  foreach t in array array['emitentes','clientes','notas_fiscais','contas_receber','configuracoes']
+  foreach t in array array['emitentes','clientes','notas_fiscais','contas_receber','importacoes_recebiveis','configuracoes']
   loop
     execute format('drop policy if exists "authenticated_all" on public.%I', t);
     execute format(
