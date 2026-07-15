@@ -22,11 +22,15 @@ on conflict (cnpj) do nothing;
 
 -- ---------- CLIENTES (tomadores) ----------
 create table if not exists public.clientes (
-  id         uuid primary key default gen_random_uuid(),
-  nome       text not null,
-  cnpj       text not null unique,            -- somente dígitos
-  created_at timestamptz not null default now()
+  id              uuid primary key default gen_random_uuid(),
+  nome            text not null,
+  cnpj            text not null unique,            -- somente dígitos
+  commission_rate numeric(6,2),                    -- taxa específica do cliente; null = usa a taxa padrão
+  created_at      timestamptz not null default now()
 );
+
+-- idempotente: garante a coluna em bancos já criados antes desta alteração
+alter table public.clientes add column if not exists commission_rate numeric(6,2);
 
 -- ---------- NOTAS FISCAIS ----------
 create table if not exists public.notas_fiscais (
@@ -91,7 +95,7 @@ create index if not exists idx_cr_cnpj_cliente on public.contas_receber (cnpj_cl
 -- ---------- CONFIGURAÇÕES (linha única) ----------
 create table if not exists public.configuracoes (
   id              int primary key default 1 check (id = 1),
-  commission_rate numeric(6,2) not null default 4,
+  commission_rate numeric(6,2) not null default 4,  -- taxa padrão, usada quando o cliente não tem uma específica
   prazo_dias      int not null default 10,
   updated_at      timestamptz not null default now()
 );

@@ -1,6 +1,6 @@
 import { useMemo, useState, Fragment } from 'react'
 import { ChevronDown, ChevronRight, FilePlus2, FileUp, Pencil, Printer, Trash2 } from 'lucide-react'
-import { useData } from '../state/DataContext'
+import { useData, tomadorKey } from '../state/DataContext'
 import type { Nota } from '../domain/types'
 import { commission, netAfterTaxes, taxesTotal, computeTotals } from '../domain/calc'
 import { getDeadlineForNota } from '../domain/prazo'
@@ -19,7 +19,7 @@ type SortKey =
   | 'nota_asc'
 
 export function NotasView() {
-  const { tabNotas, recebiveis, config, removeNota, activeTomador, emitentes } = useData()
+  const { tabNotas, recebiveis, config, removeNota, activeTomador, emitentes, commissionRateFor } = useData()
 
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('todos')
@@ -83,7 +83,10 @@ export function NotasView() {
     return list
   }, [tabNotas, search, status, servico, min, max, sort, periodOff])
 
-  const totals = useMemo(() => computeTotals(filtered, config.commissionRate), [filtered, config])
+  const totals = useMemo(
+    () => computeTotals(filtered, (n) => commissionRateFor(tomadorKey(n))),
+    [filtered, commissionRateFor],
+  )
 
   function prazoBadge(n: Nota) {
     const deadline = getDeadlineForNota(n, recebiveis, config.prazoDias)
@@ -281,7 +284,7 @@ export function NotasView() {
                       <td className="text-right tabular-nums text-ink-2 whitespace-nowrap">{fmtBRL(taxesTotal(n))}</td>
                       <td className="text-right tabular-nums whitespace-nowrap">{fmtBRL(netAfterTaxes(n))}</td>
                       <td className="text-right tabular-nums text-accent-deep whitespace-nowrap">
-                        {fmtBRL(commission(n, config.commissionRate))}
+                        {fmtBRL(commission(n, commissionRateFor(tomadorKey(n))))}
                       </td>
                       <td className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <button className="p-1.5 rounded hover:bg-ink/8 text-ink-2 cursor-pointer" title="Editar" onClick={() => startEdit(n)}>
@@ -395,10 +398,14 @@ function Detail({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
 }
 
 function PrintReport({ list }: { list: Nota[] }) {
-  const { config, activeTomador, tomadores, emitentes } = useData()
-  const totals = computeTotals(list, config.commissionRate)
+  const { config, activeTomador, tomadores, emitentes, commissionRateFor } = useData()
+  const totals = computeTotals(list, (n) => commissionRateFor(tomadorKey(n)))
   const clienteLabel =
     activeTomador === 'todos' ? 'Todos os clientes' : tomadores.find((t) => t.key === activeTomador)?.nome ?? ''
+  const comissaoLabel =
+    activeTomador === 'todos'
+      ? `taxa por cliente (padrão ${config.commissionRate}%)`
+      : `${commissionRateFor(activeTomador)}% sobre o valor líquido`
   const now = new Date()
   return (
     <div className="print-area">
@@ -406,12 +413,12 @@ function PrintReport({ list }: { list: Nota[] }) {
       <p style={{ fontSize: 11, color: '#444', margin: '4px 0 12px' }}>
         Gerado em {now.toLocaleDateString('pt-BR')} às{' '}
         {now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · Cliente: {clienteLabel} ·
-        Comissão: {config.commissionRate}% sobre o valor líquido
+        Comissão: {comissaoLabel}
       </p>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10.5 }}>
         <thead>
           <tr>
-            {['Nº', 'Cliente', 'Período', 'Emissão', 'Status', 'Valor', 'Impostos', 'Líquido', `Comissão (${config.commissionRate}%)`].map((h) => (
+            {['Nº', 'Cliente', 'Período', 'Emissão', 'Status', 'Valor', 'Impostos', 'Líquido', 'Comissão'].map((h) => (
               <th key={h} style={{ border: '1px solid #bbb', padding: '3px 6px', textAlign: 'left', background: '#eee' }}>
                 {h}
               </th>
@@ -432,7 +439,7 @@ function PrintReport({ list }: { list: Nota[] }) {
               <td style={pnum}>{fmtBRL(n.valorTotal)}</td>
               <td style={pnum}>{fmtBRL(taxesTotal(n))}</td>
               <td style={pnum}>{fmtBRL(netAfterTaxes(n))}</td>
-              <td style={pnum}>{fmtBRL(commission(n, config.commissionRate))}</td>
+              <td style={pnum}>{fmtBRL(commission(n, commissionRateFor(tomadorKey(n))))}</td>
             </tr>
           ))}
         </tbody>
@@ -452,7 +459,8 @@ function PrintReport({ list }: { list: Nota[] }) {
         † período de referência não informado na nota original.
         <br />
         Emitentes: {emitentes.map((e) => `${e.razaoSocial} — CNPJ ${e.cnpj}`).join(' · ')}. Comissão de indicação
-        calculada sobre o valor líquido pós-impostos (valor − ISS − IBS − CBS − outras retenções).
+        calculada sobre o valor líquido pós-impostos (valor − ISS − IBS − CBS − outras retenções), pela taxa
+        própria do cliente quando cadastrada, ou pela taxa padrão.
       </p>
     </div>
   )

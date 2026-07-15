@@ -2,11 +2,16 @@
  * Dados de exemplo do modo demonstração (cliente ALPHALUM, do protótipo).
  * Usados apenas em memória — nada é gravado.
  */
-import type { Emitente, Nota, Recebivel } from '../domain/types'
+import type { Cliente, Emitente, Nota, Recebivel } from '../domain/types'
 
 export const SEED_EMITENTES: Emitente[] = [
   { id: 'demo-1', razaoSocial: 'XPS LOG LTDA', cnpj: '32771162000462', inscMunicipal: '000027432', municipio: 'Vinhedo' },
   { id: 'demo-2', razaoSocial: 'XPS LOG EIRELI', cnpj: '32771162000110', inscMunicipal: '138472', municipio: 'Osasco' },
+]
+
+/** Demonstra uma taxa de comissão própria — as demais notas/clientes usam a taxa padrão. */
+export const SEED_CLIENTES: Cliente[] = [
+  { id: 'demo-cliente-1', nome: 'ALPHALUM LTDA', cnpj: '61178630000145', commissionRate: 5 },
 ]
 
 const DESC = 'Armazenamento, depósito, carga, descarga, arrumação e guarda de bens'

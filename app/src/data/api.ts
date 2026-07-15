@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import type { Config, Emitente, Nota, Recebivel } from '../domain/types'
+import type { Cliente, Config, Emitente, Nota, Recebivel } from '../domain/types'
 import { formatCnpj, normalizeCnpj } from '../lib/format'
 
 function db() {
@@ -116,6 +116,17 @@ export async function fetchEmitentes(): Promise<Emitente[]> {
   }))
 }
 
+export async function fetchClientes(): Promise<Cliente[]> {
+  const { data, error } = await db().from('clientes').select('id, nome, cnpj, commission_rate').order('nome')
+  if (error) throw error
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    nome: c.nome,
+    cnpj: c.cnpj,
+    commissionRate: c.commission_rate != null ? Number(c.commission_rate) : null,
+  }))
+}
+
 export async function fetchConfig(): Promise<Config> {
   const { data, error } = await db().from('configuracoes').select('*').eq('id', 1).single()
   if (error) throw error
@@ -209,6 +220,15 @@ export async function upsertRecebiveis(rows: Recebivel[]): Promise<void> {
     email_fatura: r.emailFatura,
   }))
   const { error } = await db().from('contas_receber').upsert(payload, { onConflict: 'id' })
+  if (error) throw error
+}
+
+/** rate = null remove a taxa específica e volta a usar a taxa padrão */
+export async function updateClienteCommissionRate(cnpj: string, rate: number | null): Promise<void> {
+  const { error } = await db()
+    .from('clientes')
+    .update({ commission_rate: rate })
+    .eq('cnpj', normalizeCnpj(cnpj))
   if (error) throw error
 }
 

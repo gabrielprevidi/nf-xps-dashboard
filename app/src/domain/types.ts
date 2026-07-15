@@ -60,7 +60,17 @@ export interface Emitente {
   municipio: string | null
 }
 
+/** Cliente persistido (tomador) — pode ter uma taxa de comissão própria. */
+export interface Cliente {
+  id: string
+  nome: string
+  cnpj: string // só dígitos
+  /** taxa específica deste cliente; null = usa a taxa padrão de Config.commissionRate */
+  commissionRate: number | null
+}
+
 export interface Config {
+  /** taxa padrão, aplicada quando o cliente não tem uma taxa própria cadastrada */
   commissionRate: number
   prazoDias: number
 }

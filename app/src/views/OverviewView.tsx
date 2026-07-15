@@ -9,9 +9,19 @@ import { RevenueChart } from '../components/RevenueChart'
 import { AlertsPanel } from '../components/AlertsPanel'
 
 export function OverviewView() {
-  const { notas, tabNotas, recebiveis, config, tomadores, activeTomador } = useData()
+  const { notas, tabNotas, recebiveis, config, tomadores, activeTomador, commissionRateFor } = useData()
 
-  const totals = useMemo(() => computeTotals(tabNotas, config.commissionRate), [tabNotas, config])
+  const totals = useMemo(
+    () => computeTotals(tabNotas, (n) => commissionRateFor(tomadorKey(n))),
+    [tabNotas, commissionRateFor],
+  )
+
+  const commissionLabel =
+    activeTomador === 'todos' ? 'Comissão' : `Comissão (${commissionRateFor(activeTomador)}%)`
+  const commissionSub =
+    activeTomador === 'todos'
+      ? 'soma pela taxa própria de cada cliente'
+      : 'indicação sobre o líquido'
 
   const pendingMonths = useMemo(() => {
     if (activeTomador === 'todos') {
@@ -50,9 +60,9 @@ export function OverviewView() {
         <KpiCard label="Impostos totais" value={fmtBRL(totals.taxes)} sub="ISS + IBS + CBS + retenções" tone="teal" />
         <KpiCard label="Valor líquido" value={fmtBRL(totals.net)} sub="pós-impostos" />
         <KpiCard
-          label={`Comissão (${config.commissionRate}%)`}
+          label={commissionLabel}
           value={fmtBRL(totals.commission)}
-          sub="indicação sobre o líquido"
+          sub={commissionSub}
           tone="commission"
         />
         <KpiCard label="Notas emitidas" value={totals.count} />

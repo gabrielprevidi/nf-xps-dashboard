@@ -8,10 +8,10 @@ import {
   type ReactNode,
 } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import type { Config, Emitente, Nota, Recebivel, Tomador } from '../domain/types'
+import type { Cliente, Config, Emitente, Nota, Recebivel, Tomador } from '../domain/types'
 import { supabase } from '../lib/supabase'
 import * as api from '../data/api'
-import { SEED_EMITENTES, SEED_NOTAS, SEED_RECEBIVEIS } from '../data/seed'
+import { SEED_CLIENTES, SEED_EMITENTES, SEED_NOTAS, SEED_RECEBIVEIS } from '../data/seed'
 import { normalizeCnpj } from '../lib/format'
 
 interface DataState {
@@ -25,12 +25,17 @@ interface DataState {
   notas: Nota[]
   recebiveis: Recebivel[]
   emitentes: Emitente[]
+  clientes: Cliente[]
   config: Config
   tomadores: Tomador[]
   activeTomador: string // 'todos' ou CNPJ normalizado
   setActiveTomador: (k: string) => void
   /** notas do cliente ativo (ou todas) */
   tabNotas: Nota[]
+  /** taxa de comissão efetiva para um tomadorKey (a do cliente, quando existir; senão a padrão) */
+  commissionRateFor: (key: string) => number
+  /** rate = null remove a taxa própria do cliente e volta a usar a padrão */
+  setClienteCommissionRate: (cnpj: string, rate: number | null) => Promise<void>
   reload: () => Promise<void>
   saveNota: (n: Nota) => Promise<void>
   removeNota: (numero: number) => Promise<void>
@@ -66,6 +71,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [notas, setNotas] = useState<Nota[]>([])
   const [recebiveis, setRecebiveis] = useState<Recebivel[]>([])
   const [emitentes, setEmitentes] = useState<Emitente[]>([])
+  const [clientes, setClientes] = useState<Cliente[]>([])
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG)
   const [activeTomador, setActiveTomador] = useState('todos')
   const [demoMode, setDemoMode] = useState(false)
@@ -74,6 +80,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setNotas(SEED_NOTAS)
     setRecebiveis(SEED_RECEBIVEIS)
     setEmitentes(SEED_EMITENTES)
+    setClientes(SEED_CLIENTES)
     setConfig(DEFAULT_CONFIG)
     setDemoMode(true)
   }, [])
@@ -96,15 +103,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     setError(null)
     try {
-      const [n, r, e, c] = await Promise.all([
+      const [n, r, e, cli, c] = await Promise.all([
         api.fetchNotas(),
         api.fetchRecebiveis(),
         api.fetchEmitentes(),
+        api.fetchClientes(),
         api.fetchConfig(),
       ])
       setNotas(n)
       setRecebiveis(r)
       setEmitentes(e)
+      setClientes(cli)
       setConfig(c)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -165,12 +174,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [demoMode],
   )
 
+  const setClienteCommissionRate = useCallback(
+    async (cnpj: string, rate: number | null) => {
+      const key = normalizeCnpj(cnpj)
+      if (!demoMode) await api.updateClienteCommissionRate(cnpj, rate)
+      setClientes((prev) => {
+        const found = prev.some((c) => c.cnpj === key)
+        if (!found) return prev
+        return prev.map((c) => (c.cnpj === key ? { ...c, commissionRate: rate } : c))
+      })
+    },
+    [demoMode],
+  )
+
   const signOut = useCallback(async () => {
     if (demoMode) {
       setDemoMode(false)
       setNotas([])
       setRecebiveis([])
       setEmitentes([])
+      setClientes([])
       return
     }
     await supabase?.auth.signOut()
@@ -184,6 +207,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [notas, activeTomador],
   )
 
+  const commissionRateFor = useCallback(
+    (key: string): number => {
+      const cliente = clientes.find((c) => c.cnpj === key)
+      return cliente?.commissionRate ?? config.commissionRate
+    },
+    [clientes, config.commissionRate],
+  )
+
   const value: DataState = {
     session,
     authReady,
@@ -194,11 +225,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     notas,
     recebiveis,
     emitentes,
+    clientes,
     config,
     tomadores,
     activeTomador,
     setActiveTomador,
     tabNotas,
+    commissionRateFor,
+    setClienteCommissionRate,
     reload,
     saveNota,
     removeNota,
