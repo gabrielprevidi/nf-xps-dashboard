@@ -1,4 +1,4 @@
-import { useMemo, useState, Fragment } from 'react'
+import { useEffect, useMemo, useRef, useState, Fragment } from 'react'
 import {
   ArrowDown,
   ArrowUp,
@@ -197,8 +197,8 @@ export function NotasView() {
       </div>
 
       {/* Filtros */}
-      <div className="no-print card p-4 space-y-3">
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2.5">
+      <div className="no-print card p-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2.5">
           <div className="col-span-2">
             <label className="field-label">Buscar</label>
             <input
@@ -234,50 +234,10 @@ export function NotasView() {
               <input className="field tabular-nums" type="number" placeholder="máx" value={max} onChange={(e) => setMax(e.target.value)} />
             </div>
           </div>
+          {uniquePeriods.length > 1 && (
+            <PeriodDropdown periods={uniquePeriods} off={periodOff} setOff={setPeriodOff} />
+          )}
         </div>
-
-        {uniquePeriods.length > 1 && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-semibold text-ink-3 mr-1">Períodos:</span>
-            {uniquePeriods.map((p) => {
-              const active = !periodOff.has(p)
-              return (
-                <button
-                  key={p}
-                  onClick={() =>
-                    setPeriodOff((prev) => {
-                      const next = new Set(prev)
-                      if (next.has(p)) next.delete(p)
-                      else next.add(p)
-                      return next
-                    })
-                  }
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold border transition-colors cursor-pointer ${
-                    active
-                      ? 'bg-accent/10 border-accent/40 text-accent-deep'
-                      : 'bg-transparent border-ink/15 text-ink-3 line-through'
-                  }`}
-                >
-                  {p}
-                </button>
-              )
-            })}
-            <span className="text-ink-3 text-[11px]">·</span>
-            {periodOff.size > 0 && (
-              <button className="text-[11px] font-semibold text-accent-deep underline cursor-pointer" onClick={() => setPeriodOff(new Set())}>
-                marcar todos
-              </button>
-            )}
-            {periodOff.size < uniquePeriods.length && (
-              <button
-                className="text-[11px] font-semibold text-ink-3 underline cursor-pointer"
-                onClick={() => setPeriodOff(new Set(uniquePeriods))}
-              >
-                limpar
-              </button>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Lista */}
@@ -474,6 +434,93 @@ function SortTh({
         )}
       </button>
     </th>
+  )
+}
+
+/** Dropdown multi-seleção de períodos — abre um painel com checkboxes em vez de chips soltos. */
+function PeriodDropdown({
+  periods,
+  off,
+  setOff,
+}: {
+  periods: string[]
+  off: Set<string>
+  setOff: (updater: (prev: Set<string>) => Set<string>) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onDocClick(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [open])
+
+  const selected = periods.filter((p) => !off.has(p))
+  const label =
+    off.size === 0
+      ? 'Todos os períodos'
+      : selected.length === 0
+        ? 'Nenhum período'
+        : selected.length <= 2
+          ? selected.join(', ')
+          : `${selected.length} períodos selecionados`
+
+  function toggle(p: string) {
+    setOff((prev) => {
+      const next = new Set(prev)
+      if (next.has(p)) next.delete(p)
+      else next.add(p)
+      return next
+    })
+  }
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <label className="field-label">Períodos</label>
+      <button
+        type="button"
+        className="field flex items-center justify-between gap-1.5 text-left cursor-pointer"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="truncate">{label}</span>
+        <ChevronDown size={14} className={`shrink-0 text-ink-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute right-0 z-30 mt-1 w-60 max-h-72 overflow-y-auto card shadow-pop p-2">
+          <div className="flex items-center justify-between px-1 pb-1.5 mb-1 border-b border-hairline">
+            <button
+              type="button"
+              className="text-[11px] font-semibold text-accent-deep underline cursor-pointer"
+              onClick={() => setOff(() => new Set())}
+            >
+              marcar todos
+            </button>
+            <button
+              type="button"
+              className="text-[11px] font-semibold text-ink-3 underline cursor-pointer"
+              onClick={() => setOff(() => new Set(periods))}
+            >
+              limpar
+            </button>
+          </div>
+          {periods.map((p) => (
+            <label key={p} className="flex items-center gap-2 px-1 py-1.5 rounded hover:bg-ink/5 cursor-pointer text-sm">
+              <input
+                type="checkbox"
+                className="size-3.5 accent-[#c1791f]"
+                checked={!off.has(p)}
+                onChange={() => toggle(p)}
+              />
+              <span className="truncate">{p}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
