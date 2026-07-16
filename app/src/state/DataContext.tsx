@@ -44,6 +44,8 @@ interface DataState {
   importRecebiveis: (rows: Recebivel[], nomeArquivo: string) => Promise<void>
   /** exclui um lote de importação inteiro (e os lançamentos ainda vinculados a ele) */
   removeImportLote: (id: string) => Promise<void>
+  /** exclui lançamentos de um cliente que não têm lote (importados antes desse recurso existir) */
+  removeUntrackedRecebiveisFor: (cliente: string) => Promise<void>
   updateConfig: (cfg: Config) => Promise<void>
   signOut: () => Promise<void>
 }
@@ -190,6 +192,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [demoMode],
   )
 
+  const removeUntrackedRecebiveisFor = useCallback(
+    async (cliente: string) => {
+      if (!demoMode) await api.deleteUntrackedRecebiveisFor(cliente)
+      setRecebiveis((prev) => prev.filter((r) => !(r.importacaoId == null && r.cliente === cliente)))
+    },
+    [demoMode],
+  )
+
   const updateConfig = useCallback(
     async (cfg: Config) => {
       if (!demoMode) await api.saveConfig(cfg)
@@ -265,6 +275,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     removeNota,
     importRecebiveis,
     removeImportLote,
+    removeUntrackedRecebiveisFor,
     updateConfig,
     signOut,
   }

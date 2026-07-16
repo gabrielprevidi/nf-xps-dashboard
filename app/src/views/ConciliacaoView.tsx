@@ -7,10 +7,29 @@ import { Badge, EmptyState } from '../components/ui'
 import { CsvImportModal } from '../components/CsvImportModal'
 
 export function ConciliacaoView() {
-  const { notas, tabNotas, recebiveis, importLotes, config, tomadores, activeTomador, setActiveTomador, removeImportLote } =
-    useData()
+  const {
+    notas,
+    tabNotas,
+    recebiveis,
+    importLotes,
+    config,
+    tomadores,
+    activeTomador,
+    setActiveTomador,
+    removeImportLote,
+    removeUntrackedRecebiveisFor,
+  } = useData()
   const [showImport, setShowImport] = useState(false)
   const [confirmDeleteLote, setConfirmDeleteLote] = useState<string | null>(null)
+  const [confirmDeleteUntracked, setConfirmDeleteUntracked] = useState<string | null>(null)
+
+  const untrackedGroups = useMemo(() => {
+    const map = new Map<string, number>()
+    recebiveis.forEach((r) => {
+      if (r.importacaoId == null) map.set(r.cliente, (map.get(r.cliente) ?? 0) + 1)
+    })
+    return [...map.entries()].sort((a, b) => b[1] - a[1])
+  }, [recebiveis])
 
   const summary = useMemo(
     () =>
@@ -87,6 +106,54 @@ export function ConciliacaoView() {
                       onClick={() => {
                         setConfirmDeleteLote(lote.id)
                         setTimeout(() => setConfirmDeleteLote((c) => (c === lote.id ? null : c)), 3000)
+                      }}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
+      {untrackedGroups.length > 0 && (
+        <div className="card p-5">
+          <h2 className="heading text-base mb-1">Lançamentos sem arquivo de origem</h2>
+          <p className="text-xs text-ink-3 mb-3">
+            Importados antes de existir o controle de arquivos acima — por isso não têm um envio para excluir
+            junto. Exclua por cliente para poder reenviar a planilha certa.
+          </p>
+          <ul className="space-y-2">
+            {untrackedGroups.map(([cliente, count]) => {
+              const confirming = confirmDeleteUntracked === cliente
+              return (
+                <li
+                  key={cliente}
+                  className="flex items-center justify-between gap-3 text-sm border-b border-hairline/70 pb-2 last:border-0"
+                >
+                  <div className="min-w-0">
+                    <div className="font-semibold truncate">{cliente}</div>
+                    <div className="text-xs text-ink-3 tabular-nums">{count} lançamento(s) sem arquivo vinculado</div>
+                  </div>
+                  {confirming ? (
+                    <button
+                      className="btn-danger px-2.5 py-1.5 text-xs shrink-0"
+                      onClick={() => {
+                        void removeUntrackedRecebiveisFor(cliente)
+                        setConfirmDeleteUntracked(null)
+                      }}
+                    >
+                      Confirmar exclusão?
+                    </button>
+                  ) : (
+                    <button
+                      className="p-1.5 rounded hover:bg-critical/10 text-critical cursor-pointer shrink-0"
+                      title="Excluir estes lançamentos"
+                      onClick={() => {
+                        setConfirmDeleteUntracked(cliente)
+                        setTimeout(() => setConfirmDeleteUntracked((c) => (c === cliente ? null : c)), 3000)
                       }}
                     >
                       <Trash2 size={15} />

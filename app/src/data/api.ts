@@ -223,6 +223,19 @@ export async function deleteImportLote(id: string): Promise<void> {
   if (error) throw error
 }
 
+/**
+ * Exclui os lançamentos de um cliente que não têm lote de importação
+ * (importados antes desse recurso existir, por isso não aparecem em "Arquivos importados").
+ */
+export async function deleteUntrackedRecebiveisFor(cliente: string): Promise<void> {
+  const { error } = await db()
+    .from('contas_receber')
+    .delete()
+    .is('importacao_id', null)
+    .eq('cliente', cliente)
+  if (error) throw error
+}
+
 /** Merge por Sequência (id) — reimportar não duplica. `loteId` marca a quem pertence o envio atual. */
 export async function upsertRecebiveis(rows: Recebivel[], loteId: string): Promise<void> {
   if (!rows.length) return
