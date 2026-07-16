@@ -22,13 +22,24 @@ export interface ReconResult {
 
 const DAY = 86400000
 
+const normName = (s: string): string => s.trim().toUpperCase().replace(/\s+/g, ' ')
+
 export function buildReconciliation(
   tomadorKey: string,
   tomadorNotas: Nota[],
   recebiveis: Recebivel[],
   prazoDias: number,
 ): ReconResult {
-  const relevant = recebiveis.filter((r) => normalizeCnpj(r.cnpjCliente) === tomadorKey)
+  // O CNPJ do CSV às vezes vem corrompido (ex.: planilha aberta no Excel converte
+  // o CNPJ em notação científica e perde dígitos, tipo "32771162000462" → "3,27712E+13").
+  // Nesse caso o lançamento nunca bateria com o cliente certo, então usamos o nome
+  // do tomador (que não sofre esse problema) como critério alternativo de match.
+  const tomadorNome = tomadorNotas[0]?.tomadorNome
+  const relevant = recebiveis.filter(
+    (r) =>
+      normalizeCnpj(r.cnpjCliente) === tomadorKey ||
+      (tomadorNome && r.cliente && normName(r.cliente) === normName(tomadorNome)),
+  )
   const usedIds = new Set<string>()
 
   const rows: ReconRow[] = tomadorNotas
