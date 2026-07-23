@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import type { Cliente, Config, Emitente, ImportLote, Nota, Recebivel } from '../domain/types'
+import type { Cliente, Config, Emitente, ImportLote, Nota, Perfil, Recebivel } from '../domain/types'
 import { formatCnpj, normalizeCnpj } from '../lib/format'
 
 function db() {
@@ -148,16 +148,93 @@ export async function fetchConfig(): Promise<Config> {
   return { commissionRate: Number(data.commission_rate), prazoDias: Number(data.prazo_dias) }
 }
 
+function rowToPerfil(p: {
+  id: string
+  email: string
+  nome: string | null
+  pode_ler: boolean
+  pode_incluir: boolean
+  pode_alterar: boolean
+  is_admin: boolean
+}): Perfil {
+  return {
+    id: p.id,
+    email: p.email,
+    nome: p.nome,
+    podeLer: p.pode_ler,
+    podeIncluir: p.pode_incluir,
+    podeAlterar: p.pode_alterar,
+    isAdmin: p.is_admin,
+  }
+}
+
+/** Perfil de permissões do usuário logado. */
+export async function fetchMyPerfil(userId: string): Promise<Perfil | null> {
+  const { data, error } = await db().from('perfis').select('*').eq('id', userId).maybeSingle()
+  if (error) throw error
+  return data ? rowToPerfil(data) : null
+}
+
+/** Lista de todos os perfis — só admins conseguem ler (RLS), para a tela de usuários. */
+export async function fetchPerfis(): Promise<Perfil[]> {
+  const { data, error } = await db().from('perfis').select('*').order('email')
+  if (error) throw error
+  return (data ?? []).map(rowToPerfil)
+}
+
+export async function updatePerfilPermissoes(
+  id: string,
+  perms: { podeLer: boolean; podeIncluir: boolean; podeAlterar: boolean; isAdmin: boolean },
+): Promise<void> {
+  const { error } = await db()
+    .from('perfis')
+    .update({
+      pode_ler: perms.podeLer,
+      pode_incluir: perms.podeIncluir,
+      pode_alterar: perms.podeAlterar,
+      is_admin: perms.isAdmin,
+    })
+    .eq('id', id)
+  if (error) throw error
+}
+
+/** Convida um novo usuário por e-mail (chama a Edge Function admin-users, que usa a service_role). */
+export async function inviteUser(params: {
+  email: string
+  nome: string
+  podeLer: boolean
+  podeIncluir: boolean
+  podeAlterar: boolean
+  isAdmin: boolean
+}): Promise<void> {
+  const { data, error } = await db().functions.invoke('admin-users', {
+    body: { action: 'invite', ...params },
+  })
+  if (error) throw error
+  if (data?.error) throw new Error(data.error)
+}
+
+/** Exclui o usuário (login e perfil) via Edge Function. */
+export async function deleteUser(userId: string): Promise<void> {
+  const { data, error } = await db().functions.invoke('admin-users', {
+    body: { action: 'delete', userId },
+  })
+  if (error) throw error
+  if (data?.error) throw new Error(data.error)
+}
+
 // ---------- Escrita ----------
 
-/** Garante o cliente (por CNPJ) e devolve o id */
+/**
+ * Garante o cliente (por CNPJ) e devolve o id. Busca antes de criar (em vez de
+ * upsert) para que reaproveitar um cliente já existente não exija permissão de
+ * "alterar" — só quem tem "incluir" já consegue lançar notas de clientes novos.
+ */
 async function ensureCliente(nome: string, cnpjFormatted: string): Promise<string> {
   const cnpj = normalizeCnpj(cnpjFormatted) || 'sem-cnpj-' + nome
-  const { data, error } = await db()
-    .from('clientes')
-    .upsert({ cnpj, nome }, { onConflict: 'cnpj' })
-    .select('id')
-    .single()
+  const { data: existing } = await db().from('clientes').select('id').eq('cnpj', cnpj).maybeSingle()
+  if (existing) return existing.id
+  const { data, error } = await db().from('clientes').insert({ cnpj, nome }).select('id').single()
   if (error) throw error
   return data.id
 }

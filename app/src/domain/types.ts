@@ -92,3 +92,14 @@ export interface Tomador {
   count: number
   total: number
 }
+
+/** Permissões de acesso de um usuário do painel. */
+export interface Perfil {
+  id: string // mesmo id do usuário em auth.users
+  email: string
+  nome: string | null
+  podeLer: boolean
+  podeIncluir: boolean
+  podeAlterar: boolean
+  isAdmin: boolean
+}

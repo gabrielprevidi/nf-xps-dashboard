@@ -7,6 +7,9 @@ app/dist-ssr
 app/.env.local
 app/.env*.local
 
+# Cache local do Supabase CLI (metadados de link, não segredos, mas não é útil versionar)
+supabase/.temp/
+
 # Editor / SO
 .vscode/*
 !.vscode/extensions.json

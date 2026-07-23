@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useData, tomadorKey } from '../state/DataContext'
 import { computeTotals } from '../domain/calc'
 import { checkMissingMonthsFor } from '../domain/prazo'
@@ -11,9 +11,22 @@ import { AlertsPanel } from '../components/AlertsPanel'
 export function OverviewView() {
   const { notas, tabNotas, recebiveis, config, tomadores, activeTomador, commissionRateFor } = useData()
 
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+
+  const dateFilteredNotas = useMemo(() => {
+    if (!dateFrom && !dateTo) return tabNotas
+    return tabNotas.filter((n) => {
+      const emissao = n.dataEmissao.slice(0, 10)
+      if (dateFrom && emissao < dateFrom) return false
+      if (dateTo && emissao > dateTo) return false
+      return true
+    })
+  }, [tabNotas, dateFrom, dateTo])
+
   const totals = useMemo(
-    () => computeTotals(tabNotas, (n) => commissionRateFor(tomadorKey(n))),
-    [tabNotas, commissionRateFor],
+    () => computeTotals(dateFilteredNotas, (n) => commissionRateFor(tomadorKey(n))),
+    [dateFilteredNotas, commissionRateFor],
   )
 
   const commissionLabel =
@@ -55,6 +68,45 @@ export function OverviewView() {
     <div className="space-y-4">
       <AlertsPanel />
 
+      <div className="no-print card p-4 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="field-label">Emissão de</label>
+          <input
+            className="field tabular-nums"
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(e) => setDateFrom(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="field-label">até</label>
+          <input
+            className="field tabular-nums"
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(e) => setDateTo(e.target.value)}
+          />
+        </div>
+        {(dateFrom || dateTo) && (
+          <button
+            className="text-xs font-semibold text-ink-3 underline cursor-pointer pb-2"
+            onClick={() => {
+              setDateFrom('')
+              setDateTo('')
+            }}
+          >
+            limpar
+          </button>
+        )}
+        {(dateFrom || dateTo) && (
+          <span className="text-xs text-ink-3 pb-2 ml-auto">
+            {totals.count} de {tabNotas.length} nota(s) no período
+          </span>
+        )}
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-3">
         <KpiCard label="Total faturado" value={fmtBRL(totals.total)} sub={`${totals.count} nota(s)`} />
         <KpiCard label="Impostos totais" value={fmtBRL(totals.taxes)} sub="ISS + IBS + CBS + retenções" tone="teal" />
@@ -88,7 +140,7 @@ export function OverviewView() {
             barras em âmbar: valor faturado · marca vermelha na base: mês sem nota
           </span>
         </div>
-        <RevenueChart notas={tabNotas} />
+        <RevenueChart notas={dateFilteredNotas} />
       </div>
 
       {reconSummary.length > 0 && activeTomador === 'todos' && (

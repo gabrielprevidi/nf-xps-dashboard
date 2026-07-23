@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import type { Cliente, Config, Emitente, ImportLote, Nota, Recebivel, Tomador } from '../domain/types'
+import type { Cliente, Config, Emitente, ImportLote, Nota, Perfil, Recebivel, Tomador } from '../domain/types'
 import { supabase } from '../lib/supabase'
 import * as api from '../data/api'
 import { SEED_CLIENTES, SEED_EMITENTES, SEED_NOTAS, SEED_RECEBIVEIS } from '../data/seed'
@@ -33,6 +33,28 @@ interface DataState {
   setActiveTomador: (k: string) => void
   /** notas do cliente ativo (ou todas) */
   tabNotas: Nota[]
+  /** perfil de permissões do usuário logado (null enquanto carrega, ou se ainda não tem perfil) */
+  myPerfil: Perfil | null
+  /** todos os perfis cadastrados — só populado para admins (RLS) */
+  perfis: Perfil[]
+  canRead: boolean
+  canInsert: boolean
+  canEdit: boolean
+  isAdmin: boolean
+  /** convida um novo usuário por e-mail, já com as permissões definidas */
+  inviteUser: (params: {
+    email: string
+    nome: string
+    podeLer: boolean
+    podeIncluir: boolean
+    podeAlterar: boolean
+    isAdmin: boolean
+  }) => Promise<void>
+  updatePerfilPermissoes: (
+    id: string,
+    perms: { podeLer: boolean; podeIncluir: boolean; podeAlterar: boolean; isAdmin: boolean },
+  ) => Promise<void>
+  removeUser: (id: string) => Promise<void>
   /** taxa de comissão efetiva para um tomadorKey (a do cliente, quando existir; senão a padrão) */
   commissionRateFor: (key: string) => number
   /** rate = null remove a taxa própria do cliente e volta a usar a padrão */
@@ -69,6 +91,16 @@ export function computeTomadores(notas: Nota[]): Tomador[] {
 
 const DEFAULT_CONFIG: Config = { commissionRate: 4, prazoDias: 10 }
 
+const DEMO_PERFIL: Perfil = {
+  id: 'demo-user',
+  email: 'demo@xpslog.com.br',
+  nome: 'Demonstração',
+  podeLer: true,
+  podeIncluir: true,
+  podeAlterar: true,
+  isAdmin: true,
+}
+
 export function DataProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(false)
@@ -82,6 +114,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG)
   const [activeTomador, setActiveTomador] = useState('todos')
   const [demoMode, setDemoMode] = useState(false)
+  const [myPerfil, setMyPerfil] = useState<Perfil | null>(null)
+  const [perfis, setPerfis] = useState<Perfil[]>([])
 
   const enterDemo = useCallback(() => {
     setNotas(SEED_NOTAS)
@@ -89,6 +123,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setEmitentes(SEED_EMITENTES)
     setClientes(SEED_CLIENTES)
     setConfig(DEFAULT_CONFIG)
+    setMyPerfil(DEMO_PERFIL)
+    setPerfis([DEMO_PERFIL])
     setDemoMode(true)
   }, [])
 
@@ -110,13 +146,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     setError(null)
     try {
-      const [n, r, lotes, e, cli, c] = await Promise.all([
+      const [n, r, lotes, e, cli, c, meu, todosPerfis] = await Promise.all([
         api.fetchNotas(),
         api.fetchRecebiveis(),
         api.fetchImportLotes(),
         api.fetchEmitentes(),
         api.fetchClientes(),
         api.fetchConfig(),
+        api.fetchMyPerfil(session.user.id),
+        api.fetchPerfis(),
       ])
       setNotas(n)
       setRecebiveis(r)
@@ -124,6 +162,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setEmitentes(e)
       setClientes(cli)
       setConfig(c)
+      setMyPerfil(meu)
+      setPerfis(todosPerfis)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -221,6 +261,43 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [demoMode],
   )
 
+  const inviteUser = useCallback(
+    async (params: {
+      email: string
+      nome: string
+      podeLer: boolean
+      podeIncluir: boolean
+      podeAlterar: boolean
+      isAdmin: boolean
+    }) => {
+      if (demoMode) {
+        const novo: Perfil = { id: 'demo-' + Date.now(), ...params, nome: params.nome || null }
+        setPerfis((prev) => [...prev, novo])
+        return
+      }
+      await api.inviteUser(params)
+      setPerfis(await api.fetchPerfis())
+    },
+    [demoMode],
+  )
+
+  const updatePerfilPermissoes = useCallback(
+    async (id: string, perms: { podeLer: boolean; podeIncluir: boolean; podeAlterar: boolean; isAdmin: boolean }) => {
+      if (!demoMode) await api.updatePerfilPermissoes(id, perms)
+      setPerfis((prev) => prev.map((p) => (p.id === id ? { ...p, ...perms } : p)))
+      setMyPerfil((prev) => (prev && prev.id === id ? { ...prev, ...perms } : prev))
+    },
+    [demoMode],
+  )
+
+  const removeUser = useCallback(
+    async (id: string) => {
+      if (!demoMode) await api.deleteUser(id)
+      setPerfis((prev) => prev.filter((p) => p.id !== id))
+    },
+    [demoMode],
+  )
+
   const signOut = useCallback(async () => {
     if (demoMode) {
       setDemoMode(false)
@@ -229,12 +306,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setImportLotes([])
       setEmitentes([])
       setClientes([])
+      setMyPerfil(null)
+      setPerfis([])
       return
     }
     await supabase?.auth.signOut()
     setNotas([])
     setRecebiveis([])
     setImportLotes([])
+    setMyPerfil(null)
+    setPerfis([])
   }, [demoMode])
 
   const tomadores = useMemo(() => computeTomadores(notas), [notas])
@@ -250,6 +331,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     },
     [clientes, config.commissionRate],
   )
+
+  const isAdmin = myPerfil?.isAdmin ?? false
+  const canRead = isAdmin || (myPerfil?.podeLer ?? false)
+  const canInsert = isAdmin || (myPerfil?.podeIncluir ?? false)
+  const canEdit = isAdmin || (myPerfil?.podeAlterar ?? false)
 
   const value: DataState = {
     session,
@@ -268,6 +354,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     activeTomador,
     setActiveTomador,
     tabNotas,
+    myPerfil,
+    perfis,
+    canRead,
+    canInsert,
+    canEdit,
+    isAdmin,
+    inviteUser,
+    updatePerfilPermissoes,
+    removeUser,
     commissionRateFor,
     setClienteCommissionRate,
     reload,

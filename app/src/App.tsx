@@ -19,8 +19,19 @@ const NAV: { id: View; label: string; icon: typeof BarChart3 }[] = [
 ]
 
 function Layout() {
-  const { session, authReady, demoMode, loading, error, reload, signOut, tomadores, activeTomador } =
-    useData()
+  const {
+    session,
+    authReady,
+    demoMode,
+    loading,
+    error,
+    reload,
+    signOut,
+    tomadores,
+    activeTomador,
+    myPerfil,
+    canRead,
+  } = useData()
   const [view, setView] = useState<View>('overview')
 
   if (!authReady)
@@ -30,6 +41,31 @@ function Layout() {
       </div>
     )
   if (!session && !demoMode) return <LoginView />
+
+  // Ainda buscando o perfil de permissões deste usuário (primeiro carregamento após o login).
+  if (!demoMode && loading && !myPerfil)
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Spinner label="Carregando permissões…" />
+      </div>
+    )
+
+  if (!demoMode && !canRead) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="card max-w-md p-6 text-center">
+          <h1 className="heading text-lg mb-2">Sem permissão de acesso</h1>
+          <p className="text-sm text-ink-2 leading-relaxed">
+            Seu usuário ({session?.user.email}) ainda não tem permissão de leitura liberada. Fale com o
+            administrador do painel para configurar seu acesso em Configurações → Usuários.
+          </p>
+          <button className="btn-ghost mt-4" onClick={() => void signOut()}>
+            Sair
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   const activeNome =
     activeTomador === 'todos'

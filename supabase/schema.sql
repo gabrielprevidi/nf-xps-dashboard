@@ -133,7 +133,54 @@ drop trigger if exists trg_config_updated on public.configuracoes;
 create trigger trg_config_updated before update on public.configuracoes
   for each row execute function public.set_updated_at();
 
--- ---------- SEGURANÇA (RLS): somente usuários logados ----------
+-- ---------- PERFIS DE USUÁRIO (permissões de acesso ao painel) ----------
+create table if not exists public.perfis (
+  id           uuid primary key references auth.users(id) on delete cascade,
+  email        text not null,
+  nome         text,
+  pode_ler     boolean not null default true,
+  pode_incluir boolean not null default false,
+  pode_alterar boolean not null default false,
+  is_admin     boolean not null default false,
+  criado_em    timestamptz not null default now()
+);
+
+alter table public.perfis enable row level security;
+
+-- Bootstrap: usuários de autenticação que já existiam antes deste recurso
+-- viram admin com acesso total, para não travar quem já usava o painel.
+insert into public.perfis (id, email, nome, pode_ler, pode_incluir, pode_alterar, is_admin)
+select id, email, email, true, true, true, true
+from auth.users
+on conflict (id) do nothing;
+
+-- ---------- FUNÇÕES DE PERMISSÃO (usadas nas políticas de RLS abaixo) ----------
+create or replace function public.is_admin()
+returns boolean
+language sql security definer stable
+set search_path = public
+as $$
+  select coalesce((select is_admin from public.perfis where id = auth.uid()), false)
+$$;
+
+create or replace function public.has_permission(perm text)
+returns boolean
+language sql security definer stable
+set search_path = public
+as $$
+  select coalesce(
+    (select is_admin or case perm
+        when 'ler' then pode_ler
+        when 'incluir' then pode_incluir
+        when 'alterar' then pode_alterar
+        else false
+      end
+     from public.perfis where id = auth.uid()),
+    false
+  )
+$$;
+
+-- ---------- SEGURANÇA (RLS): acesso conforme o perfil de permissões ----------
 alter table public.emitentes             enable row level security;
 alter table public.clientes              enable row level security;
 alter table public.notas_fiscais         enable row level security;
@@ -147,7 +194,35 @@ begin
   foreach t in array array['emitentes','clientes','notas_fiscais','contas_receber','importacoes_recebiveis','configuracoes']
   loop
     execute format('drop policy if exists "authenticated_all" on public.%I', t);
+    execute format('drop policy if exists "select_by_permission" on public.%I', t);
+    execute format('drop policy if exists "insert_by_permission" on public.%I', t);
+    execute format('drop policy if exists "update_by_permission" on public.%I', t);
+    execute format('drop policy if exists "delete_by_permission" on public.%I', t);
+
     execute format(
-      'create policy "authenticated_all" on public.%I for all to authenticated using (true) with check (true)', t);
+      'create policy "select_by_permission" on public.%I for select to authenticated using (public.has_permission(''ler''))', t);
+    execute format(
+      'create policy "insert_by_permission" on public.%I for insert to authenticated with check (public.has_permission(''incluir''))', t);
+    execute format(
+      'create policy "update_by_permission" on public.%I for update to authenticated using (public.has_permission(''alterar'')) with check (public.has_permission(''alterar''))', t);
+    execute format(
+      'create policy "delete_by_permission" on public.%I for delete to authenticated using (public.has_permission(''alterar''))', t);
   end loop;
 end $$;
+
+-- perfis: cada usuário vê o próprio registro; só admin vê/gerencia os demais
+drop policy if exists "ver_proprio_ou_admin" on public.perfis;
+create policy "ver_proprio_ou_admin" on public.perfis for select to authenticated
+  using (id = auth.uid() or public.is_admin());
+
+drop policy if exists "admin_insere_perfil" on public.perfis;
+create policy "admin_insere_perfil" on public.perfis for insert to authenticated
+  with check (public.is_admin());
+
+drop policy if exists "admin_atualiza_perfil" on public.perfis;
+create policy "admin_atualiza_perfil" on public.perfis for update to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists "admin_exclui_perfil" on public.perfis;
+create policy "admin_exclui_perfil" on public.perfis for delete to authenticated
+  using (public.is_admin());

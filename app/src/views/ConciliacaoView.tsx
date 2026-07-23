@@ -18,6 +18,7 @@ export function ConciliacaoView() {
     setActiveTomador,
     removeImportLote,
     removeUntrackedRecebiveisFor,
+    canEdit,
   } = useData()
   const [showImport, setShowImport] = useState(false)
   const [confirmDeleteLote, setConfirmDeleteLote] = useState<string | null>(null)
@@ -48,9 +49,11 @@ export function ConciliacaoView() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <button className="btn-primary" onClick={() => setShowImport(true)}>
-          <FileSpreadsheet size={16} /> Importar CSV do financeiro
-        </button>
+        {canEdit && (
+          <button className="btn-primary" onClick={() => setShowImport(true)}>
+            <FileSpreadsheet size={16} /> Importar CSV do financeiro
+          </button>
+        )}
         <span className="ml-auto text-sm text-ink-2 tabular-nums">
           <b>{recebiveis.length}</b> lançamento(s) importado(s)
         </span>
@@ -89,28 +92,29 @@ export function ConciliacaoView() {
                       {vigentes} ainda vigente(s)
                     </div>
                   </div>
-                  {confirming ? (
-                    <button
-                      className="btn-danger px-2.5 py-1.5 text-xs shrink-0"
-                      onClick={() => {
-                        void removeImportLote(lote.id)
-                        setConfirmDeleteLote(null)
-                      }}
-                    >
-                      Confirmar exclusão?
-                    </button>
-                  ) : (
-                    <button
-                      className="p-1.5 rounded hover:bg-critical/10 text-critical cursor-pointer shrink-0"
-                      title="Excluir este arquivo importado"
-                      onClick={() => {
-                        setConfirmDeleteLote(lote.id)
-                        setTimeout(() => setConfirmDeleteLote((c) => (c === lote.id ? null : c)), 3000)
-                      }}
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  )}
+                  {canEdit &&
+                    (confirming ? (
+                      <button
+                        className="btn-danger px-2.5 py-1.5 text-xs shrink-0"
+                        onClick={() => {
+                          void removeImportLote(lote.id)
+                          setConfirmDeleteLote(null)
+                        }}
+                      >
+                        Confirmar exclusão?
+                      </button>
+                    ) : (
+                      <button
+                        className="p-1.5 rounded hover:bg-critical/10 text-critical cursor-pointer shrink-0"
+                        title="Excluir este arquivo importado"
+                        onClick={() => {
+                          setConfirmDeleteLote(lote.id)
+                          setTimeout(() => setConfirmDeleteLote((c) => (c === lote.id ? null : c)), 3000)
+                        }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    ))}
                 </li>
               )
             })}
@@ -137,28 +141,29 @@ export function ConciliacaoView() {
                     <div className="font-semibold truncate">{cliente}</div>
                     <div className="text-xs text-ink-3 tabular-nums">{count} lançamento(s) sem arquivo vinculado</div>
                   </div>
-                  {confirming ? (
-                    <button
-                      className="btn-danger px-2.5 py-1.5 text-xs shrink-0"
-                      onClick={() => {
-                        void removeUntrackedRecebiveisFor(cliente)
-                        setConfirmDeleteUntracked(null)
-                      }}
-                    >
-                      Confirmar exclusão?
-                    </button>
-                  ) : (
-                    <button
-                      className="p-1.5 rounded hover:bg-critical/10 text-critical cursor-pointer shrink-0"
-                      title="Excluir estes lançamentos"
-                      onClick={() => {
-                        setConfirmDeleteUntracked(cliente)
-                        setTimeout(() => setConfirmDeleteUntracked((c) => (c === cliente ? null : c)), 3000)
-                      }}
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  )}
+                  {canEdit &&
+                    (confirming ? (
+                      <button
+                        className="btn-danger px-2.5 py-1.5 text-xs shrink-0"
+                        onClick={() => {
+                          void removeUntrackedRecebiveisFor(cliente)
+                          setConfirmDeleteUntracked(null)
+                        }}
+                      >
+                        Confirmar exclusão?
+                      </button>
+                    ) : (
+                      <button
+                        className="p-1.5 rounded hover:bg-critical/10 text-critical cursor-pointer shrink-0"
+                        title="Excluir estes lançamentos"
+                        onClick={() => {
+                          setConfirmDeleteUntracked(cliente)
+                          setTimeout(() => setConfirmDeleteUntracked((c) => (c === cliente ? null : c)), 3000)
+                        }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    ))}
                 </li>
               )
             })}

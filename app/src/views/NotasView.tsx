@@ -60,7 +60,8 @@ function prazoSortValue(n: Nota, recebiveis: Recebivel[], prazoDias: number): nu
 }
 
 export function NotasView() {
-  const { tabNotas, recebiveis, config, removeNota, activeTomador, emitentes, commissionRateFor } = useData()
+  const { tabNotas, recebiveis, config, removeNota, activeTomador, emitentes, commissionRateFor, canInsert, canEdit } =
+    useData()
 
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('todos')
@@ -176,18 +177,22 @@ export function NotasView() {
     <div className="space-y-4">
       {/* Ações */}
       <div className="no-print flex flex-wrap items-center gap-2">
-        <button
-          className="btn-primary"
-          onClick={() => {
-            setEditingNum(undefined)
-            setFormDraft({})
-          }}
-        >
-          <FilePlus2 size={16} /> Nova nota
-        </button>
-        <button className="btn-ghost" onClick={() => setShowPdfImport(true)}>
-          <FileUp size={16} /> Importar PDF(s)
-        </button>
+        {canInsert && (
+          <>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                setEditingNum(undefined)
+                setFormDraft({})
+              }}
+            >
+              <FilePlus2 size={16} /> Nova nota
+            </button>
+            <button className="btn-ghost" onClick={() => setShowPdfImport(true)}>
+              <FileUp size={16} /> Importar PDF(s)
+            </button>
+          </>
+        )}
         <button className="btn-ghost" onClick={() => window.print()}>
           <Printer size={16} /> Imprimir / PDF
         </button>
@@ -298,31 +303,35 @@ export function NotasView() {
                         {fmtBRL(commission(n, commissionRateFor(tomadorKey(n))))}
                       </td>
                       <td className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                        <button className="p-1.5 rounded hover:bg-ink/8 text-ink-2 cursor-pointer" title="Editar" onClick={() => startEdit(n)}>
-                          <Pencil size={14} />
-                        </button>
-                        {confirmDelete === n.numero ? (
-                          <button
-                            className="p-1.5 rounded bg-critical text-white text-[11px] font-bold cursor-pointer"
-                            title="Clique para confirmar a exclusão"
-                            onClick={() => {
-                              void removeNota(n.numero)
-                              setConfirmDelete(null)
-                            }}
-                          >
-                            confirmar?
-                          </button>
-                        ) : (
-                          <button
-                            className="p-1.5 rounded hover:bg-critical/10 text-critical cursor-pointer"
-                            title="Excluir"
-                            onClick={() => {
-                              setConfirmDelete(n.numero)
-                              setTimeout(() => setConfirmDelete((c) => (c === n.numero ? null : c)), 3000)
-                            }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                        {canEdit && (
+                          <>
+                            <button className="p-1.5 rounded hover:bg-ink/8 text-ink-2 cursor-pointer" title="Editar" onClick={() => startEdit(n)}>
+                              <Pencil size={14} />
+                            </button>
+                            {confirmDelete === n.numero ? (
+                              <button
+                                className="p-1.5 rounded bg-critical text-white text-[11px] font-bold cursor-pointer"
+                                title="Clique para confirmar a exclusão"
+                                onClick={() => {
+                                  void removeNota(n.numero)
+                                  setConfirmDelete(null)
+                                }}
+                              >
+                                confirmar?
+                              </button>
+                            ) : (
+                              <button
+                                className="p-1.5 rounded hover:bg-critical/10 text-critical cursor-pointer"
+                                title="Excluir"
+                                onClick={() => {
+                                  setConfirmDelete(n.numero)
+                                  setTimeout(() => setConfirmDelete((c) => (c === n.numero ? null : c)), 3000)
+                                }}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </>
                         )}
                       </td>
                     </tr>
