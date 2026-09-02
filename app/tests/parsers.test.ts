@@ -30,7 +30,7 @@ interface Expected {
   file: string
   numero: number
   emitenteCnpj: string
-  layout: 'vinhedo' | 'osasco'
+  layout: 'vinhedo' | 'osasco' | 'nacional'
 }
 
 // nº esperado vem do próprio nome do arquivo; emitente pela filial de cada leiaute
@@ -44,9 +44,10 @@ const CASES: Expected[] = [
   { file: '1774.pdf', numero: 1774, emitenteCnpj: '32771162000462', layout: 'vinhedo' },
   { file: 'NF 1756 Cobrança de Armazenagem TECNIA.pdf', numero: 1756, emitenteCnpj: '32771162000462', layout: 'vinhedo' },
   { file: 'NF 1790 - Fedrigoni.pdf', numero: 1790, emitenteCnpj: '32771162000462', layout: 'vinhedo' },
+  { file: '17124-nacional.pdf', numero: 17124, emitenteCnpj: '32771162000110', layout: 'nacional' },
 ]
 
-describe('parseNFSeText — 9 notas reais', () => {
+describe('parseNFSeText — notas reais', () => {
   for (const c of CASES) {
     it(`${c.file} (${c.layout})`, async () => {
       const text = await extractText(c.file)

@@ -98,7 +98,7 @@ export function PdfImportModal({
         <div className="mt-1 text-xs text-ink-3">
           1 arquivo abre o formulário para revisão · vários arquivos entram direto no painel
         </div>
-        <div className="mt-1 text-xs text-ink-3">Leiautes suportados: Vinhedo e Osasco</div>
+        <div className="mt-1 text-xs text-ink-3">Leiautes suportados: Vinhedo, Osasco e Nacional (DANFSe)</div>
         <input
           ref={inputRef}
           type="file"

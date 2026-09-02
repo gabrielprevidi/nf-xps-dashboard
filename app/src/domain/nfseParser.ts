@@ -6,7 +6,7 @@
  * segue a ordem visual do PDF — especialmente no layout de Osasco, onde os
  * valores são localizados pelo FORMATO (nº de dígitos, "%", prefixo "NFS")
  * em vez de proximidade com o rótulo. Não trocar a lib/versão de extração
- * sem recalibrar contra os 9 PDFs reais de regressão (tests/fixtures).
+ * sem recalibrar contra os PDFs reais de regressão (tests/fixtures).
  */
 import type { Nota, NotaStatus } from './types'
 import { parseBRNumber, MESES_LABEL, normalizeCnpj } from '../lib/format'
@@ -238,20 +238,106 @@ export function parseNFSeTextOsasco(text: string): ParsedNota {
   return r
 }
 
-/** Tenta os dois layouts e fica com o que reconheceu mais campos. */
-export function parseNFSeText(text: string): ParsedNota {
-  const primary = parseNFSeTextVinhedo(text)
-  const alt = parseNFSeTextOsasco(text)
-  const primaryOk = !!(primary.numero || primary.valorTotal)
-  const altOk = !!(alt.numero || alt.valorTotal)
-  if (primaryOk && !altOk) return primary
-  if (altOk && !primaryOk) return alt
-  if (primaryOk && altOk) {
-    const countFields = (obj: object) =>
-      Object.values(obj).filter((v) => v !== undefined && v !== null && v !== '').length
-    return countFields(alt) > countFields(primary) ? alt : primary
+/**
+ * Layout 3: DANFSe V2.0 — leiaute nacional padronizado (portal nfse.gov.br),
+ * adotado por diversos municípios em substituição ao modelo próprio da
+ * prefeitura (ex.: Osasco passou a emitir também neste formato). Rótulo e
+ * valor vêm em linhas separadas ("RÓTULO\n\nvalor"), sem tabelas — por isso
+ * os campos são localizados pelo texto do rótulo, e não pelo formato do valor.
+ */
+export function parseNFSeTextNacional(text: string): ParsedNota {
+  const r: ParsedNota = {}
+  let m: RegExpMatchArray | null
+
+  m = text.match(/NÚMERO DA NFS-e\s*\n+\s*(\d+)/)
+  if (m) r.numero = parseInt(m[1], 10)
+
+  m = text.match(/DATA E HORA DA EMISSÃO DA NFS-E\s*\n+\s*(\d{2})-(\d{2})-(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/i)
+  if (m) {
+    const [, dd, mm, yyyy, hh, mi, ss] = m
+    r.dataEmissao = `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`
   }
-  return primary
+
+  // A competência informa diretamente o mês/ano de referência (sem período de
+  // datas como nos outros leiautes).
+  m = text.match(/COMPETÊNCIA DA NFS-e\s*\n+\s*(\d{2})-(\d{2})-(\d{4})/i)
+  if (m) {
+    const [, , mm, yyyy] = m
+    r.sortDate = `${yyyy}-${mm}-01`
+    r.periodoLabel = `${MESES_LABEL[mm] || mm}/${yyyy}`
+    r.periodoInfo = true
+  } else {
+    r.periodoInfo = false
+    r.periodoLabel = 'Não especificado'
+  }
+
+  m = text.match(/CHAVE DE ACESSO DA NFS-E\s*\n+\s*(\d{20,60})/i)
+  if (m) r.chaveAcesso = m[1]
+
+  m = text.match(/Descrição do Serviço\s*\n+\s*([^\n]+)/i)
+  if (m) r.discriminacao = m[1].trim()
+
+  // Código e descrição do serviço aparecem juntos, logo antes do rótulo
+  // "Descrição do Serviço" (ex.: "16.02 - Outros serviços de transporte...").
+  m = text.match(/(\d{1,2}\.\d{2})\s*-\s*([^\n]+?)\.?\s*\n+\s*Descrição do Serviço/i)
+  if (m) {
+    r.codServico = m[1]
+    r.descServico = m[2].trim()
+  }
+
+  m = text.match(/Código da NBS\s*\n+\s*([\d.]+)/i)
+  if (m) r.nbs = m[1]
+
+  m = text.match(/VALOR DA OPERAÇÃO\s*\/\s*SERVIÇO\s*\n+\s*([\d.,]+)/i)
+  if (m) r.valorTotal = parseBRNumber(m[1])
+
+  m = text.match(/BC ISSQN\s*\n+\s*([\d.,]+)/i)
+  if (m) r.baseCalculoISS = parseBRNumber(m[1])
+
+  m = text.match(/ISSQN Apurado\s*\n+\s*([\d.,]+)/i)
+  if (m) r.valorISS = parseBRNumber(m[1])
+
+  m = text.match(/Alíquota Aplicada\s*\n+\s*([\d.,]+)/i)
+  if (m) r.aliquota = parseBRNumber(m[1])
+
+  // IBS e CBS: "Valor Total Apurado" (IBS UF+Mun) seguido de "Valor Total
+  // Apurado - CBS" — casados na mesma regex para não confundir um rótulo com
+  // o outro (um é prefixo textual do outro).
+  m = text.match(
+    /Valor Total Apurado\s*\n+\s*([\d.,]+)\s*\n+\s*Valor Total Apurado - CBS\s*\n+\s*([\d.,]+)/i,
+  )
+  if (m) {
+    r.valorIBS = parseBRNumber(m[1])
+    r.valorCBS = parseBRNumber(m[2])
+  } else {
+    r.valorIBS = 0
+    r.valorCBS = 0
+  }
+
+  m = text.match(/Total das Retenções \(ISSQN \/ Federais\)\s*\n+\s*([\d.,]+)/i)
+  r.outrasRetTotal = m ? parseBRNumber(m[1]) : 0
+
+  const razaoMatches = [...text.matchAll(/Nome\/Nome Empresarial\s*\n+\s*([^\n]+)/gi)]
+  if (razaoMatches.length >= 2) r.tomadorNome = razaoMatches[1][1].trim()
+  const cnpjMatches = [...text.matchAll(/CNPJ\/CPF\/NIF\s*\n+\s*(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/gi)]
+  if (cnpjMatches.length >= 1) r.emitenteCnpj = normalizeCnpj(cnpjMatches[0][1])
+  if (cnpjMatches.length >= 2) r.tomadorCnpj = cnpjMatches[1][1].trim()
+
+  if (r.nbs && !r.nbsDesc) r.nbsDesc = r.descServico || 'Armazenagem'
+
+  return r
+}
+
+/** Tenta os três layouts e fica com o que reconheceu mais campos. */
+export function parseNFSeText(text: string): ParsedNota {
+  const candidates = [parseNFSeTextVinhedo(text), parseNFSeTextOsasco(text), parseNFSeTextNacional(text)]
+  const isOk = (c: ParsedNota) => !!(c.numero || c.valorTotal)
+  const countFields = (obj: object) =>
+    Object.values(obj).filter((v) => v !== undefined && v !== null && v !== '').length
+
+  const valid = candidates.filter(isOk)
+  if (valid.length === 0) return candidates[0]
+  return valid.reduce((best, cur) => (countFields(cur) > countFields(best) ? cur : best))
 }
 
 /** Campos indispensáveis para aceitar uma nota no envio em lote. */
