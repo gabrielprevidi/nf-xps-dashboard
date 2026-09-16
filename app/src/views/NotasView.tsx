@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, Fragment } from 'react'
+import * as XLSX from 'xlsx'
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
   ChevronDown,
   ChevronRight,
+  FileSpreadsheet,
   FilePlus2,
   FileUp,
   Pencil,
@@ -173,6 +175,38 @@ export function NotasView() {
     return e ? `${e.razaoSocial} · ${e.municipio}` : cnpj
   }
 
+  function exportExcel() {
+    const rows = filtered.map((n) => ({
+      'Número': n.numero,
+      'Cliente': n.tomadorNome,
+      'CNPJ Cliente': n.tomadorCnpj,
+      'Emitente': emitenteNome(n.emitenteCnpj) ?? '',
+      'Período': n.periodoLabel,
+      'Emissão': fmtDate(n.dataEmissao),
+      'Status': n.status === 'autenticada' ? 'Autenticada' : 'Pendente',
+      'Serviço': n.descServico,
+      'NBS': n.nbs ? `${n.nbs} — ${n.nbsDesc}` : n.nbsDesc,
+      'Valor Total': n.valorTotal,
+      'Base Cálculo ISS': n.baseCalculoISS,
+      'Alíquota ISS (%)': n.aliquota,
+      'ISS': n.valorISS,
+      'IBS': n.valorIBS,
+      'CBS': n.valorCBS,
+      'Outras Retenções': n.outrasRetTotal,
+      'Impostos Total': taxesTotal(n),
+      'Líquido': netAfterTaxes(n),
+      'Comissão': commission(n, commissionRateFor(tomadorKey(n))),
+      'Código Verificação': n.codVerificacao,
+      'Chave de Acesso': n.chaveAcesso ?? '',
+    }))
+    const sheet = XLSX.utils.json_to_sheet(rows)
+    sheet['!cols'] = Object.keys(rows[0] ?? {}).map((k) => ({ wch: Math.max(k.length, 12) }))
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Notas Fiscais')
+    const stamp = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(workbook, `notas-fiscais-${stamp}.xlsx`)
+  }
+
   return (
     <div className="space-y-4">
       {/* Ações */}
@@ -195,6 +229,9 @@ export function NotasView() {
         )}
         <button className="btn-ghost" onClick={() => window.print()}>
           <Printer size={16} /> Imprimir / PDF
+        </button>
+        <button className="btn-ghost" onClick={exportExcel} disabled={filtered.length === 0}>
+          <FileSpreadsheet size={16} /> Exportar Excel
         </button>
         <span className="ml-auto text-sm text-ink-2 tabular-nums">
           <b>{filtered.length}</b> de {tabNotas.length} nota(s)
