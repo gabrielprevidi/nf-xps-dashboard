@@ -6,6 +6,7 @@ import {
   buildNoteFromParsed,
   CAMPOS_OBRIGATORIOS_LOTE,
   parseNFSeText,
+  validateParsedNota,
   type ParsedNota,
 } from '../domain/nfseParser'
 import { useData } from '../state/DataContext'
@@ -58,11 +59,21 @@ export function PdfImportModal({
             const text = await extractTextFromPdf(f)
             const parsed = parseNFSeText(text)
             const missing = CAMPOS_OBRIGATORIOS_LOTE.filter((c) => parsed[c] == null || parsed[c] === '')
+            const problemas = missing.length ? [] : validateParsedNota(parsed)
             if (missing.length) {
               out.push({
                 name: f.name,
                 ok: false,
                 msg: `Campos não reconhecidos: ${missing.join(', ')} — lance manualmente.`,
+              })
+            } else if (problemas.length) {
+              // Os campos vieram completos, mas os valores não fecham entre si —
+              // sinal de leiaute não suportado lido por engano. Recusa em vez de
+              // gravar uma nota com valor errado.
+              out.push({
+                name: f.name,
+                ok: false,
+                msg: `Valores inconsistentes (${problemas.join('; ')}) — confira o PDF e lance manualmente.`,
               })
             } else {
               await saveNota(buildNoteFromParsed(parsed))

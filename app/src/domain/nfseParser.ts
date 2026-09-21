@@ -328,8 +328,72 @@ export function parseNFSeTextNacional(text: string): ParsedNota {
   return r
 }
 
-/** Tenta os três layouts e fica com o que reconheceu mais campos. */
+export type Layout = 'vinhedo' | 'osasco' | 'nacional'
+
+/**
+ * Rótulos exclusivos de cada leiaute, usados só para IDENTIFICAR o documento —
+ * nunca para extrair valores. Calibrados contra os PDFs de tests/fixtures: os
+ * 10 casos reais acertam 4/4 da própria família e 0/4 das outras duas.
+ */
+const ASSINATURAS: Record<Layout, RegExp[]> = {
+  vinhedo: [/Nº Nota/, /DISCRIMINAÇÃO DOS SERVIÇOS/, /Vlr Líquido da Nota/, /VALOR TOTAL DA NOTA/],
+  osasco: [
+    /Discrimina[çc][ãa]o do Servi[çc]o:/i,
+    /Autenticador:/,
+    /C[óo]d\.\s*do Servi[çc]o:/i,
+    /Valor Total do Servi[çc]o/i,
+  ],
+  nacional: [
+    /N[ÚU]MERO DA NFS-e/i,
+    /DANFSe/i,
+    /CHAVE DE ACESSO DA NFS-E/i,
+    /COMPET[ÊE]NCIA DA NFS-e/i,
+  ],
+}
+
+/** Mínimo de rótulos próprios para considerar o documento daquele leiaute. */
+const MIN_ASSINATURAS = 2
+
+/**
+ * Identifica o leiaute pelos rótulos do documento, antes de extrair qualquer
+ * valor. Devolve null quando nenhum leiaute se identifica com segurança — é o
+ * caso, por exemplo, de um DANFE de NF-e (modelo 55), que traz "VALOR TOTAL DA
+ * NOTA" e por isso acerta 1 assinatura do leiaute de Vinhedo, mas nenhuma
+ * outra.
+ */
+export function detectLayout(text: string): Layout | null {
+  let melhor: Layout | null = null
+  let melhorScore = 0
+  for (const [layout, regexes] of Object.entries(ASSINATURAS) as [Layout, RegExp[]][]) {
+    const score = regexes.filter((re) => re.test(text)).length
+    if (score > melhorScore) {
+      melhor = layout
+      melhorScore = score
+    }
+  }
+  return melhorScore >= MIN_ASSINATURAS ? melhor : null
+}
+
+const PARSER_POR_LAYOUT: Record<Layout, (text: string) => ParsedNota> = {
+  vinhedo: parseNFSeTextVinhedo,
+  osasco: parseNFSeTextOsasco,
+  nacional: parseNFSeTextNacional,
+}
+
+/**
+ * Escolhe o parser pelo leiaute identificado no documento.
+ *
+ * Quando nenhum leiaute se identifica, cai no comportamento antigo (roda os
+ * três e fica com o que reconheceu mais campos) — mas esse resultado é só um
+ * palpite, e quem chama deve passá-lo por `validateParsedNota` antes de gravar.
+ * Isso importa porque o parser de Osasco localiza valores pelo FORMATO, com
+ * regexes sem âncora: num documento de outro leiaute ele casa números avulsos e
+ * devolve uma nota bem-formada, porém com valores errados.
+ */
 export function parseNFSeText(text: string): ParsedNota {
+  const layout = detectLayout(text)
+  if (layout) return PARSER_POR_LAYOUT[layout](text)
+
   const candidates = [parseNFSeTextVinhedo(text), parseNFSeTextOsasco(text), parseNFSeTextNacional(text)]
   const isOk = (c: ParsedNota) => !!(c.numero || c.valorTotal)
   const countFields = (obj: object) =>
@@ -338,6 +402,81 @@ export function parseNFSeText(text: string): ParsedNota {
   const valid = candidates.filter(isOk)
   if (valid.length === 0) return candidates[0]
   return valid.reduce((best, cur) => (countFields(cur) > countFields(best) ? cur : best))
+}
+
+/**
+ * Confere a coerência interna do que foi extraído e devolve a lista de
+ * problemas (vazia = nota consistente).
+ *
+ * São relações que qualquer NFS-e respeita — base não supera o total, as
+ * retenções não superam o total, o ISS bate com base × alíquota — e não limites
+ * arbitrários de valor. Servem para recusar o arquivo em vez de gravar em
+ * silêncio uma nota com valor errado.
+ *
+ * Deliberadamente NÃO existe piso de valor: as notas de fechamento de mês de
+ * cliente sem armazenagem saem por valor simbólico (R$ 0,01) e são legítimas —
+ * veja as pausas de armazenagem em domain/armazenagem.ts.
+ */
+export function validateParsedNota(p: ParsedNota): string[] {
+  const problemas: string[] = []
+  const tol = 0.01
+
+  if (p.numero == null || !Number.isInteger(p.numero) || p.numero <= 0) {
+    problemas.push('nº da nota inválido')
+  }
+
+  if (p.dataEmissao) {
+    const ano = Number(String(p.dataEmissao).slice(0, 4))
+    const anoLimite = new Date().getFullYear() + 1
+    if (!Number.isFinite(ano) || ano < 2000 || ano > anoLimite) {
+      problemas.push(`data de emissão implausível (${p.dataEmissao})`)
+    }
+  }
+
+  const total = p.valorTotal
+  if (total == null || !Number.isFinite(total) || total <= 0) {
+    problemas.push('valor total ausente ou zerado')
+    return problemas // sem total, as demais checagens não têm referência
+  }
+  if (p.aliquota != null && (p.aliquota < 0 || p.aliquota > 100)) {
+    problemas.push(`alíquota fora da faixa (${p.aliquota})`)
+  }
+
+  const retencoes: [string, number | undefined][] = [
+    ['ISS', p.valorISS],
+    ['IBS', p.valorIBS],
+    ['CBS', p.valorCBS],
+    ['outras retenções', p.outrasRetTotal],
+  ]
+  for (const [nome, v] of retencoes) {
+    if (v == null) continue
+    if (v < 0) problemas.push(`${nome} negativo (${v.toFixed(2)})`)
+    else if (v > total + tol) problemas.push(`${nome} maior que o valor total (${v.toFixed(2)} > ${total.toFixed(2)})`)
+  }
+
+  const somaRetencoes = retencoes.reduce((s, [, v]) => s + (v ?? 0), 0)
+  if (somaRetencoes > total + tol) {
+    problemas.push(`retenções somam mais que o valor total (${somaRetencoes.toFixed(2)} > ${total.toFixed(2)})`)
+  }
+
+  if (p.baseCalculoISS != null && p.baseCalculoISS > total + tol) {
+    problemas.push(
+      `base de cálculo maior que o valor total (${p.baseCalculoISS.toFixed(2)} > ${total.toFixed(2)})`,
+    )
+  }
+
+  // ISS apurado = base × alíquota. Tolerância absorve o arredondamento do
+  // centavo (e 1% para municípios que arredondam a apuração de outro jeito).
+  if (p.aliquota != null && p.aliquota > 0 && p.baseCalculoISS != null && p.baseCalculoISS > 0 && p.valorISS != null) {
+    const esperado = (p.baseCalculoISS * p.aliquota) / 100
+    if (Math.abs(p.valorISS - esperado) > Math.max(0.02, esperado * 0.01)) {
+      problemas.push(
+        `ISS incoerente com base × alíquota (${p.valorISS.toFixed(2)} ≠ ${esperado.toFixed(2)})`,
+      )
+    }
+  }
+
+  return problemas
 }
 
 /** Campos indispensáveis para aceitar uma nota no envio em lote. */

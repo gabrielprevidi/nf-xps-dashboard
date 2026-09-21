@@ -8,7 +8,12 @@ import { describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { createRequire } from 'node:module'
-import { parseNFSeText, CAMPOS_OBRIGATORIOS_LOTE } from '../src/domain/nfseParser'
+import {
+  parseNFSeText,
+  detectLayout,
+  validateParsedNota,
+  CAMPOS_OBRIGATORIOS_LOTE,
+} from '../src/domain/nfseParser'
 
 const require = createRequire(import.meta.url)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -53,10 +58,16 @@ describe('parseNFSeText — notas reais', () => {
       const text = await extractText(c.file)
       const p = parseNFSeText(text)
 
+      // o leiaute é identificado pelos rótulos do documento, antes de extrair valores
+      expect(detectLayout(text)).toBe(c.layout)
+
       // campos obrigatórios do envio em lote
       for (const campo of CAMPOS_OBRIGATORIOS_LOTE) {
         expect(p[campo], `campo obrigatório ausente: ${campo}`).toBeTruthy()
       }
+
+      // valores coerentes entre si (base, alíquota, ISS e retenções)
+      expect(validateParsedNota(p)).toEqual([])
 
       expect(p.numero).toBe(c.numero)
       expect(p.emitenteCnpj).toBe(c.emitenteCnpj)
@@ -77,4 +88,77 @@ describe('parseNFSeText — notas reais', () => {
       )
     })
   }
+})
+
+/**
+ * O contrário da regressão acima: documentos que o painel NÃO pode aceitar.
+ * Antes destas travas, um leiaute não suportado podia ser lido pelos regexes
+ * "por formato" do parser de Osasco e virar uma nota bem-formada com valor
+ * errado (o sintoma relatado foi R$ 0,01 no painel).
+ */
+describe('recusa de documentos não suportados', () => {
+  it('DANFE de NF-e (modelo 55) não é confundido com NFS-e', async () => {
+    const text = await extractText('danfe-nfe-modelo55.pdf')
+
+    // traz "VALOR TOTAL DA NOTA" (1 assinatura de Vinhedo), mas nenhuma outra
+    expect(detectLayout(text)).toBeNull()
+
+    const p = parseNFSeText(text)
+    const missing = CAMPOS_OBRIGATORIOS_LOTE.filter((c) => p[c] == null || p[c] === '')
+    expect(missing.length, 'DANFE não deveria preencher os campos obrigatórios').toBeGreaterThan(0)
+  })
+
+  it('nota de fechamento de mês (valor simbólico) é aceita', () => {
+    // cliente sem armazenagem: a nota existe só para fechar o mês
+    expect(
+      validateParsedNota({
+        numero: 150158,
+        valorTotal: 0.01,
+        baseCalculoISS: 0.01,
+        aliquota: 2,
+        valorISS: 0,
+        valorIBS: 0,
+        valorCBS: 0,
+        outrasRetTotal: 0,
+        dataEmissao: '2026-07-31T10:00:00',
+      }),
+    ).toEqual([])
+  })
+
+  it('retenção maior que o total é recusada', () => {
+    const problemas = validateParsedNota({ numero: 1, valorTotal: 100, valorISS: 250 })
+    expect(problemas).toContain('ISS maior que o valor total (250.00 > 100.00)')
+  })
+
+  it('ISS que não bate com base × alíquota é recusado', () => {
+    const problemas = validateParsedNota({
+      numero: 1,
+      valorTotal: 10000,
+      baseCalculoISS: 10000,
+      aliquota: 2,
+      valorISS: 5,
+    })
+    expect(problemas).toContain('ISS incoerente com base × alíquota (5.00 ≠ 200.00)')
+  })
+
+  it('base de cálculo acima do total é recusada', () => {
+    const problemas = validateParsedNota({ numero: 1, valorTotal: 100, baseCalculoISS: 5000 })
+    expect(problemas).toContain('base de cálculo maior que o valor total (5000.00 > 100.00)')
+  })
+
+  it('nota consistente passa sem problemas', () => {
+    expect(
+      validateParsedNota({
+        numero: 16728,
+        valorTotal: 5877.55,
+        baseCalculoISS: 5877.55,
+        aliquota: 2,
+        valorISS: 117.55,
+        valorIBS: 5.76,
+        valorCBS: 51.84,
+        outrasRetTotal: 0,
+        dataEmissao: '2026-08-31T10:00:00',
+      }),
+    ).toEqual([])
+  })
 })
