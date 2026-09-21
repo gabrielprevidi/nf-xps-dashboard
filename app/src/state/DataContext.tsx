@@ -8,11 +8,22 @@ import {
   type ReactNode,
 } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import type { Cliente, Config, Emitente, ImportLote, Nota, Perfil, Recebivel, Tomador } from '../domain/types'
+import type {
+  Cliente,
+  Config,
+  Emitente,
+  ImportLote,
+  Nota,
+  PausaArmazenagem,
+  Perfil,
+  Recebivel,
+  Tomador,
+} from '../domain/types'
 import { supabase } from '../lib/supabase'
 import * as api from '../data/api'
 import { SEED_CLIENTES, SEED_EMITENTES, SEED_NOTAS, SEED_RECEBIVEIS } from '../data/seed'
 import { normalizeCnpj } from '../lib/format'
+import { notaSemArmazenagem, pausaAberta } from '../domain/armazenagem'
 
 interface DataState {
   session: Session | null
@@ -27,6 +38,8 @@ interface DataState {
   importLotes: ImportLote[]
   emitentes: Emitente[]
   clientes: Cliente[]
+  /** períodos em que cada cliente deixou de armazenar */
+  pausasArmazenagem: PausaArmazenagem[]
   config: Config
   tomadores: Tomador[]
   activeTomador: string // 'todos' ou CNPJ normalizado
@@ -59,6 +72,16 @@ interface DataState {
   commissionRateFor: (key: string) => number
   /** rate = null remove a taxa própria do cliente e volta a usar a padrão */
   setClienteCommissionRate: (cnpj: string, rate: number | null) => Promise<void>
+  /** a nota cai num período sem armazenagem? (só sinalização, não altera cálculos) */
+  isNotaSemArmazenagem: (n: Nota) => boolean
+  /** pausa ainda em aberto do cliente, se houver */
+  pausaAbertaDe: (clienteKey: string) => PausaArmazenagem | null
+  /** marca que o cliente parou de armazenar a partir de parouEm (YYYY-MM-01) */
+  pausarArmazenagem: (cnpj: string, parouEm: string, observacao?: string | null) => Promise<void>
+  /** reabre: o cliente voltou a armazenar em retomouEm (YYYY-MM-01) */
+  retomarArmazenagem: (pausaId: string, retomouEm: string) => Promise<void>
+  /** desfaz um registro de pausa lançado por engano */
+  removerPausaArmazenagem: (pausaId: string) => Promise<void>
   reload: () => Promise<void>
   saveNota: (n: Nota) => Promise<void>
   removeNota: (numero: number) => Promise<void>
@@ -111,6 +134,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [importLotes, setImportLotes] = useState<ImportLote[]>([])
   const [emitentes, setEmitentes] = useState<Emitente[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const [pausasArmazenagem, setPausasArmazenagem] = useState<PausaArmazenagem[]>([])
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG)
   const [activeTomador, setActiveTomador] = useState('todos')
   const [demoMode, setDemoMode] = useState(false)
@@ -122,6 +146,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setRecebiveis(SEED_RECEBIVEIS)
     setEmitentes(SEED_EMITENTES)
     setClientes(SEED_CLIENTES)
+    setPausasArmazenagem([])
     setConfig(DEFAULT_CONFIG)
     setMyPerfil(DEMO_PERFIL)
     setPerfis([DEMO_PERFIL])
@@ -146,12 +171,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     setError(null)
     try {
-      const [n, r, lotes, e, cli, c, meu, todosPerfis] = await Promise.all([
+      const [n, r, lotes, e, cli, pausas, c, meu, todosPerfis] = await Promise.all([
         api.fetchNotas(),
         api.fetchRecebiveis(),
         api.fetchImportLotes(),
         api.fetchEmitentes(),
         api.fetchClientes(),
+        api.fetchPausasArmazenagem(),
         api.fetchConfig(),
         api.fetchMyPerfil(session.user.id),
         api.fetchPerfis(),
@@ -161,6 +187,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setImportLotes(lotes)
       setEmitentes(e)
       setClientes(cli)
+      setPausasArmazenagem(pausas)
       setConfig(c)
       setMyPerfil(meu)
       setPerfis(todosPerfis)
@@ -261,6 +288,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [demoMode],
   )
 
+  const pausarArmazenagem = useCallback(
+    async (cnpj: string, parouEm: string, observacao: string | null = null) => {
+      const key = normalizeCnpj(cnpj)
+      if (demoMode) {
+        setPausasArmazenagem((prev) => [
+          { id: 'demo-pausa-' + Date.now(), clienteCnpj: key, parouEm, retomouEm: null, observacao },
+          ...prev,
+        ])
+        return
+      }
+      await api.createPausaArmazenagem(cnpj, parouEm, observacao)
+      await reload()
+    },
+    [demoMode, reload],
+  )
+
+  const retomarArmazenagem = useCallback(
+    async (pausaId: string, retomouEm: string) => {
+      if (!demoMode) await api.reabrirArmazenagem(pausaId, retomouEm)
+      setPausasArmazenagem((prev) =>
+        prev.map((p) => (p.id === pausaId ? { ...p, retomouEm } : p)),
+      )
+    },
+    [demoMode],
+  )
+
+  const removerPausaArmazenagem = useCallback(
+    async (pausaId: string) => {
+      if (!demoMode) await api.deletePausaArmazenagem(pausaId)
+      setPausasArmazenagem((prev) => prev.filter((p) => p.id !== pausaId))
+    },
+    [demoMode],
+  )
+
   const inviteUser = useCallback(
     async (params: {
       email: string
@@ -306,6 +367,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setImportLotes([])
       setEmitentes([])
       setClientes([])
+      setPausasArmazenagem([])
       setMyPerfil(null)
       setPerfis([])
       return
@@ -332,6 +394,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [clientes, config.commissionRate],
   )
 
+  const isNotaSemArmazenagem = useCallback(
+    (n: Nota): boolean => notaSemArmazenagem(pausasArmazenagem, n),
+    [pausasArmazenagem],
+  )
+
+  const pausaAbertaDe = useCallback(
+    (clienteKey: string): PausaArmazenagem | null => pausaAberta(pausasArmazenagem, clienteKey),
+    [pausasArmazenagem],
+  )
+
   const isAdmin = myPerfil?.isAdmin ?? false
   const canRead = isAdmin || (myPerfil?.podeLer ?? false)
   const canInsert = isAdmin || (myPerfil?.podeIncluir ?? false)
@@ -349,6 +421,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     importLotes,
     emitentes,
     clientes,
+    pausasArmazenagem,
     config,
     tomadores,
     activeTomador,
@@ -365,6 +438,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     removeUser,
     commissionRateFor,
     setClienteCommissionRate,
+    isNotaSemArmazenagem,
+    pausaAbertaDe,
+    pausarArmazenagem,
+    retomarArmazenagem,
+    removerPausaArmazenagem,
     reload,
     saveNota,
     removeNota,

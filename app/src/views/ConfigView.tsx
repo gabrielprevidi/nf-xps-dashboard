@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Trash2, UserPlus } from 'lucide-react'
+import { PackageX, RotateCcw, Trash2, UserPlus } from 'lucide-react'
 import { useData } from '../state/DataContext'
 import { formatCnpj } from '../lib/format'
+import { dateToMes, mesLabel, mesSeguinte, mesToDate, pausaLabel, pausasDoCliente } from '../domain/armazenagem'
 import type { Perfil, Tomador } from '../domain/types'
 
 export function ConfigView() {
@@ -91,6 +92,26 @@ export function ConfigView() {
       </div>
 
       <div className="card p-5">
+        <h2 className="heading text-base mb-1">Armazenagem por cliente</h2>
+        <p className="text-xs text-ink-3 mb-3">
+          Marque o mês em que o cliente parou de armazenar. As notas desse mês em diante — as de valor
+          simbólico, emitidas só para fechar o mês — passam a aparecer com o selo{' '}
+          <span className="whitespace-nowrap">“sem armazenagem”</span> na lista de notas. Se o cliente
+          voltar a armazenar, reabra informando o mês de retorno. A marcação é informativa: não altera
+          faturamento, comissão nem prazo.
+        </p>
+        {tomadores.length === 0 ? (
+          <p className="text-sm text-ink-3">Nenhum cliente cadastrado ainda.</p>
+        ) : (
+          <ul className="space-y-2">
+            {tomadores.map((t) => (
+              <ClientStorageRow key={t.key} tomador={t} canEdit={canEdit} />
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="card p-5">
         <h2 className="heading text-base mb-3">Emitentes (filiais)</h2>
         <ul className="space-y-2">
           {emitentes.map((e) => (
@@ -114,6 +135,123 @@ export function ConfigView() {
     </div>
   )
 }
+
+/** Mês corrente no formato do <input type="month">. */
+const mesAtual = (): string => new Date().toISOString().slice(0, 7)
+
+/**
+ * Estado de armazenagem de um cliente: abre a pausa (parou de armazenar),
+ * reabre (voltou) e lista o histórico de períodos já encerrados.
+ */
+function ClientStorageRow({ tomador, canEdit }: { tomador: Tomador; canEdit: boolean }) {
+  const { pausasArmazenagem, pausarArmazenagem, retomarArmazenagem, removerPausaArmazenagem } = useData()
+  const pausas = pausasDoCliente(pausasArmazenagem, tomador.key)
+  const aberta = pausas.find((p) => p.retomouEm === null) ?? null
+  const encerradas = pausas.filter((p) => p.retomouEm !== null)
+
+  const [editando, setEditando] = useState(false)
+  const [mes, setMes] = useState(mesAtual())
+  const [busy, setBusy] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+
+  async function confirmar() {
+    setBusy(true)
+    setErro(null)
+    try {
+      if (aberta) await retomarArmazenagem(aberta.id, mesToDate(mes))
+      else await pausarArmazenagem(tomador.cnpj, mesToDate(mes))
+      setEditando(false)
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function abrirEdicao() {
+    // a retomada tem de ser posterior à parada (check do banco)
+    setMes(aberta ? maxMes(mesAtual(), dateToMes(mesSeguinte(aberta.parouEm))) : mesAtual())
+    setErro(null)
+    setEditando(true)
+  }
+
+  return (
+    <li className="border-b border-hairline/70 pb-2 last:border-0">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <div className="min-w-0">
+          <div className="font-semibold truncate">{tomador.nome}</div>
+          <div className="text-xs text-ink-3 tabular-nums">{tomador.cnpj || '—'}</div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {aberta ? (
+            <span className="text-xs text-critical font-semibold whitespace-nowrap">
+              sem armazenagem desde {mesLabel(aberta.parouEm)}
+            </span>
+          ) : (
+            <span className="text-xs text-ink-3 whitespace-nowrap">armazenando</span>
+          )}
+          {canEdit && !editando && (
+            <button className="btn-ghost px-2.5 py-1.5 text-xs inline-flex items-center gap-1.5" onClick={abrirEdicao}>
+              {aberta ? <RotateCcw size={13} /> : <PackageX size={13} />}
+              {aberta ? 'Reabrir' : 'Marcar parada'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {editando && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <label className="text-ink-2">{aberta ? 'Voltou a armazenar em' : 'Parou de armazenar em'}</label>
+          <input
+            className="field w-40 py-1.5"
+            type="month"
+            value={mes}
+            min={aberta ? dateToMes(mesSeguinte(aberta.parouEm)) : undefined}
+            onChange={(e) => setMes(e.target.value)}
+          />
+          <button className="btn-primary px-2.5 py-1.5 text-xs" disabled={busy} onClick={() => void confirmar()}>
+            {busy ? 'Salvando…' : 'Confirmar'}
+          </button>
+          <button className="btn-cancel px-2.5 py-1.5 text-xs" disabled={busy} onClick={() => setEditando(false)}>
+            Cancelar
+          </button>
+          {aberta && (
+            <button
+              className="btn-ghost px-2.5 py-1.5 text-xs text-critical"
+              disabled={busy}
+              title="Remove o registro da parada, como se nunca tivesse sido marcada"
+              onClick={() => void removerPausaArmazenagem(aberta.id).then(() => setEditando(false))}
+            >
+              Desfazer marcação
+            </button>
+          )}
+          {erro && <span className="text-critical font-semibold">{erro}</span>}
+        </div>
+      )}
+
+      {encerradas.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5">
+          {encerradas.map((p) => (
+            <li key={p.id} className="text-xs text-ink-3">
+              {pausaLabel(p)}
+              {canEdit && (
+                <button
+                  className="ml-2 underline hover:text-critical"
+                  onClick={() => void removerPausaArmazenagem(p.id)}
+                >
+                  remover
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  )
+}
+
+/** O maior entre dois meses "YYYY-MM" (comparação lexicográfica serve). */
+const maxMes = (a: string, b: string): string => (a >= b ? a : b)
 
 function ClientRateRow({
   tomador,

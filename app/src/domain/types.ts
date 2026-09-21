@@ -79,6 +79,22 @@ export interface Cliente {
   commissionRate: number | null
 }
 
+/**
+ * Período em que o cliente deixou de armazenar. As notas desses meses saem por
+ * valor simbólico, só para fechar o mês. `retomouEm` nulo = segue sem armazenar.
+ * O intervalo é meio aberto: [parouEm, retomouEm).
+ */
+export interface PausaArmazenagem {
+  id: string
+  /** CNPJ do cliente, só dígitos */
+  clienteCnpj: string
+  /** YYYY-MM-01 do primeiro mês sem armazenagem */
+  parouEm: string
+  /** YYYY-MM-01 do mês em que voltou a armazenar; null = ainda parado */
+  retomouEm: string | null
+  observacao: string | null
+}
+
 export interface Config {
   /** taxa padrão, aplicada quando o cliente não tem uma taxa própria cadastrada */
   commissionRate: number

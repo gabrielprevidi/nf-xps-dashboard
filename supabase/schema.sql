@@ -107,6 +107,27 @@ alter table public.contas_receber
 
 create index if not exists idx_cr_importacao on public.contas_receber (importacao_id);
 
+-- ---------- PAUSAS DE ARMAZENAGEM ----------
+-- Períodos em que o cliente deixou de armazenar. A nota continua sendo emitida
+-- nesses meses, por valor simbólico, só para fechar o mês — o painel sinaliza
+-- essas notas para que o valor não seja confundido com erro de importação.
+-- Intervalo meio aberto: [parou_em, retomou_em). retomou_em nulo = ainda parado.
+create table if not exists public.pausas_armazenagem (
+  id         uuid primary key default gen_random_uuid(),
+  cliente_id uuid not null references public.clientes(id) on delete cascade,
+  parou_em   date not null,                    -- 1º dia do primeiro mês sem armazenagem
+  retomou_em date,                             -- 1º dia do mês em que voltou a armazenar
+  observacao text,
+  created_at timestamptz not null default now(),
+  constraint pausa_periodo_valido check (retomou_em is null or retomou_em > parou_em)
+);
+
+create index if not exists idx_pausas_cliente on public.pausas_armazenagem (cliente_id);
+
+-- no máximo uma pausa em aberto por cliente
+create unique index if not exists idx_pausa_aberta_por_cliente
+  on public.pausas_armazenagem (cliente_id) where retomou_em is null;
+
 -- ---------- CONFIGURAÇÕES (linha única) ----------
 create table if not exists public.configuracoes (
   id              int primary key default 1 check (id = 1),
@@ -187,11 +208,12 @@ alter table public.notas_fiscais         enable row level security;
 alter table public.contas_receber        enable row level security;
 alter table public.importacoes_recebiveis enable row level security;
 alter table public.configuracoes         enable row level security;
+alter table public.pausas_armazenagem    enable row level security;
 
 do $$
 declare t text;
 begin
-  foreach t in array array['emitentes','clientes','notas_fiscais','contas_receber','importacoes_recebiveis','configuracoes']
+  foreach t in array array['emitentes','clientes','notas_fiscais','contas_receber','importacoes_recebiveis','configuracoes','pausas_armazenagem']
   loop
     execute format('drop policy if exists "authenticated_all" on public.%I', t);
     execute format('drop policy if exists "select_by_permission" on public.%I', t);

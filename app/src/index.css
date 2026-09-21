@@ -126,6 +126,10 @@ body {
 .stamp-critical {
   @apply text-critical border-critical bg-critical-soft;
 }
+/* neutro: sinaliza sem alarmar (ex.: mês sem armazenagem) */
+.stamp-muted {
+  @apply text-ink-2 border-ink/25 bg-ink/5;
+}
 
 /* Impressão: só a área de relatório */
 @media print {

@@ -17,6 +17,7 @@ import { useData, tomadorKey } from '../state/DataContext'
 import type { Nota, Recebivel } from '../domain/types'
 import { commission, netAfterTaxes, taxesTotal, computeTotals } from '../domain/calc'
 import { getDeadlineForNota } from '../domain/prazo'
+import { pausaDaNota, pausaLabel } from '../domain/armazenagem'
 import { dateOnly, fmtBRL, fmtDate, fmtDateTime } from '../lib/format'
 import { EmptyState, Stamp } from '../components/ui'
 import { NotaFormModal, type NotaDraft } from '../components/NotaForm'
@@ -62,12 +63,23 @@ function prazoSortValue(n: Nota, recebiveis: Recebivel[], prazoDias: number): nu
 }
 
 export function NotasView() {
-  const { tabNotas, recebiveis, config, removeNota, activeTomador, emitentes, commissionRateFor, canInsert, canEdit } =
-    useData()
+  const {
+    tabNotas,
+    recebiveis,
+    config,
+    removeNota,
+    activeTomador,
+    emitentes,
+    commissionRateFor,
+    pausasArmazenagem,
+    canInsert,
+    canEdit,
+  } = useData()
 
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('todos')
   const [servico, setServico] = useState('todos')
+  const [armazenagem, setArmazenagem] = useState('todos')
   const [min, setMin] = useState('')
   const [max, setMax] = useState('')
   const [sort, setSort] = useState<SortState>({ column: 'periodo', dir: 'desc' })
@@ -95,6 +107,10 @@ export function NotasView() {
     const list = tabNotas.filter((n) => {
       if (periodOff.has(n.periodoLabel)) return false
       if (servico !== 'todos' && n.nbsDesc !== servico) return false
+      if (armazenagem !== 'todos') {
+        const sem = pausaDaNota(pausasArmazenagem, n) !== null
+        if (armazenagem === 'sem' ? !sem : sem) return false
+      }
       if (status !== 'todos' && n.status !== status) return false
       if (!isNaN(minV) && n.valorTotal < minV) return false
       if (!isNaN(maxV) && n.valorTotal > maxV) return false
@@ -134,7 +150,21 @@ export function NotasView() {
       }
     })
     return list
-  }, [tabNotas, search, status, servico, min, max, sort, periodOff, recebiveis, config.prazoDias, commissionRateFor])
+  }, [
+    tabNotas,
+    search,
+    status,
+    servico,
+    armazenagem,
+    pausasArmazenagem,
+    min,
+    max,
+    sort,
+    periodOff,
+    recebiveis,
+    config.prazoDias,
+    commissionRateFor,
+  ])
 
   const totals = useMemo(
     () => computeTotals(filtered, (n) => commissionRateFor(tomadorKey(n))),
@@ -182,6 +212,7 @@ export function NotasView() {
       'CNPJ Cliente': n.tomadorCnpj,
       'Emitente': emitenteNome(n.emitenteCnpj) ?? '',
       'Período': n.periodoLabel,
+      'Armazenagem': pausaDaNota(pausasArmazenagem, n) ? 'sem armazenagem' : 'com armazenagem',
       'Emissão': fmtDate(n.dataEmissao),
       'Status': n.status === 'autenticada' ? 'Autenticada' : 'Pendente',
       'Serviço': n.descServico,
@@ -259,6 +290,14 @@ export function NotasView() {
             </select>
           </div>
           <div>
+            <label className="field-label">Armazenagem</label>
+            <select className="field" value={armazenagem} onChange={(e) => setArmazenagem(e.target.value)}>
+              <option value="todos">Todas</option>
+              <option value="com">Com armazenagem</option>
+              <option value="sem">Sem armazenagem</option>
+            </select>
+          </div>
+          <div>
             <label className="field-label">Tipo de serviço</label>
             <select className="field" value={servico} onChange={(e) => setServico(e.target.value)}>
               <option value="todos">Todos</option>
@@ -326,11 +365,21 @@ export function NotasView() {
                       </td>
                       <td className="tabular-nums whitespace-nowrap">{fmtDate(n.dataEmissao)}</td>
                       <td>
-                        {n.status === 'autenticada' ? (
-                          <Stamp tone="ok">autenticada</Stamp>
-                        ) : (
-                          <Stamp tone="critical">pendente</Stamp>
-                        )}
+                        <div className="flex flex-wrap items-center gap-1">
+                          {n.status === 'autenticada' ? (
+                            <Stamp tone="ok">autenticada</Stamp>
+                          ) : (
+                            <Stamp tone="critical">pendente</Stamp>
+                          )}
+                          {(() => {
+                            const pausa = pausaDaNota(pausasArmazenagem, n)
+                            return pausa ? (
+                              <Stamp tone="muted" title={`Cliente ${pausaLabel(pausa)} — a nota fecha o mês, sem armazenagem`}>
+                                sem armazenagem
+                              </Stamp>
+                            ) : null
+                          })()}
+                        </div>
                       </td>
                       <td>{prazoBadge(n)}</td>
                       <td className="text-right tabular-nums font-semibold whitespace-nowrap">{fmtBRL(n.valorTotal)}</td>

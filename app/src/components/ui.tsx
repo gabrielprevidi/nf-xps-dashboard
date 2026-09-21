@@ -63,9 +63,17 @@ export function Badge({
 }
 
 /** "Carimbo" rotacionado — para status binários de destaque (autenticada/pendente, no prazo/atrasado) */
-export function Stamp({ tone, children, title }: { tone: 'ok' | 'critical'; children: ReactNode; title?: string }) {
+export function Stamp({
+  tone,
+  children,
+  title,
+}: {
+  tone: 'ok' | 'critical' | 'muted'
+  children: ReactNode
+  title?: string
+}) {
   return (
-    <span title={title} className={`stamp ${tone === 'ok' ? 'stamp-ok' : 'stamp-critical'}`}>
+    <span title={title} className={`stamp stamp-${tone}`}>
       {children}
     </span>
   )

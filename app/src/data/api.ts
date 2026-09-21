@@ -1,5 +1,14 @@
 import { supabase } from '../lib/supabase'
-import type { Cliente, Config, Emitente, ImportLote, Nota, Perfil, Recebivel } from '../domain/types'
+import type {
+  Cliente,
+  Config,
+  Emitente,
+  ImportLote,
+  Nota,
+  PausaArmazenagem,
+  Perfil,
+  Recebivel,
+} from '../domain/types'
 import { formatCnpj, normalizeCnpj } from '../lib/format'
 
 function db() {
@@ -352,6 +361,71 @@ export async function updateClienteCommissionRate(cnpj: string, rate: number | n
     .from('clientes')
     .update({ commission_rate: rate })
     .eq('cnpj', normalizeCnpj(cnpj))
+  if (error) throw error
+}
+
+// ---------- Pausas de armazenagem ----------
+
+interface PausaRow {
+  id: string
+  parou_em: string
+  retomou_em: string | null
+  observacao: string | null
+  clientes: { cnpj: string } | null
+}
+
+const rowToPausa = (r: PausaRow): PausaArmazenagem => ({
+  id: r.id,
+  clienteCnpj: normalizeCnpj(r.clientes?.cnpj ?? ''),
+  parouEm: r.parou_em,
+  retomouEm: r.retomou_em,
+  observacao: r.observacao,
+})
+
+export async function fetchPausasArmazenagem(): Promise<PausaArmazenagem[]> {
+  const { data, error } = await db()
+    .from('pausas_armazenagem')
+    .select('id, parou_em, retomou_em, observacao, clientes(cnpj)')
+    .order('parou_em', { ascending: false })
+  if (error) throw error
+  return (data as unknown as PausaRow[]).map(rowToPausa)
+}
+
+async function clienteIdByCnpj(cnpj: string): Promise<string> {
+  const { data, error } = await db()
+    .from('clientes')
+    .select('id')
+    .eq('cnpj', normalizeCnpj(cnpj))
+    .maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error('Cliente não encontrado no cadastro')
+  return data.id
+}
+
+/** Abre uma pausa: o cliente parou de armazenar a partir de `parouEm` (YYYY-MM-01). */
+export async function createPausaArmazenagem(
+  cnpj: string,
+  parouEm: string,
+  observacao: string | null,
+): Promise<void> {
+  const cliente_id = await clienteIdByCnpj(cnpj)
+  const { error } = await db()
+    .from('pausas_armazenagem')
+    .insert({ cliente_id, parou_em: parouEm, observacao })
+  if (error) throw error
+}
+
+/** Fecha a pausa: o cliente voltou a armazenar em `retomouEm` (YYYY-MM-01, exclusivo). */
+export async function reabrirArmazenagem(pausaId: string, retomouEm: string): Promise<void> {
+  const { error } = await db()
+    .from('pausas_armazenagem')
+    .update({ retomou_em: retomouEm })
+    .eq('id', pausaId)
+  if (error) throw error
+}
+
+export async function deletePausaArmazenagem(pausaId: string): Promise<void> {
+  const { error } = await db().from('pausas_armazenagem').delete().eq('id', pausaId)
   if (error) throw error
 }
 
