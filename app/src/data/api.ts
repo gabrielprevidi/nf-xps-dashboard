@@ -408,12 +408,15 @@ export async function createPausaArmazenagem(
   parouEm: string,
   observacao: string | null,
   retomouEm: string | null = null,
-): Promise<void> {
+): Promise<string> {
   const cliente_id = await clienteIdByCnpj(cnpj)
-  const { error } = await db()
+  const { data, error } = await db()
     .from('pausas_armazenagem')
     .insert({ cliente_id, parou_em: parouEm, retomou_em: retomouEm, observacao })
+    .select('id')
+    .single()
   if (error) throw error
+  return data.id
 }
 
 /** Fecha a pausa: o cliente voltou a armazenar em `retomouEm` (YYYY-MM-01, exclusivo). */

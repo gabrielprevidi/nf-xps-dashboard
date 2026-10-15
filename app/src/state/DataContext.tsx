@@ -78,8 +78,8 @@ interface DataState {
   pausaAbertaDe: (clienteKey: string) => PausaArmazenagem | null
   /** marca que o cliente parou de armazenar a partir de parouEm (YYYY-MM-01) */
   pausarArmazenagem: (cnpj: string, parouEm: string, observacao?: string | null) => Promise<void>
-  /** marca um único mês (YYYY-MM-01) em que o cliente não teve armazenagem */
-  marcarMesSemArmazenagem: (cnpj: string, mes: string) => Promise<void>
+  /** marca um único mês (YYYY-MM-01) em que o cliente não teve armazenagem; devolve o id da pausa (para desfazer) */
+  marcarMesSemArmazenagem: (cnpj: string, mes: string) => Promise<string>
   /** reabre: o cliente voltou a armazenar em retomouEm (YYYY-MM-01) */
   retomarArmazenagem: (pausaId: string, retomouEm: string) => Promise<void>
   /** desfaz um registro de pausa lançado por engano */
@@ -311,14 +311,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const key = normalizeCnpj(cnpj)
       const retomouEm = mesSeguinte(mes)
       if (demoMode) {
+        const id = 'demo-pausa-' + Date.now()
         setPausasArmazenagem((prev) => [
-          { id: 'demo-pausa-' + Date.now(), clienteCnpj: key, parouEm: mes, retomouEm, observacao: null },
+          { id, clienteCnpj: key, parouEm: mes, retomouEm, observacao: null },
           ...prev,
         ])
-        return
+        return id
       }
-      await api.createPausaArmazenagem(cnpj, mes, null, retomouEm)
+      const id = await api.createPausaArmazenagem(cnpj, mes, null, retomouEm)
       await reload()
+      return id
     },
     [demoMode, reload],
   )
