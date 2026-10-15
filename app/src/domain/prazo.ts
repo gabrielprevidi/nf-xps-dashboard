@@ -51,12 +51,17 @@ export interface MissingMonthsResult {
   resolved: { numero: number; periodoLabel: string }[]
   /** períodos após o último conhecido que já estouraram o prazo sem nota */
   overdue: string[]
+  /** mesmos meses de `missing`/`overdue`, como "YYYY-MM" (mesma ordem) */
+  missingKeys: string[]
+  overdueKeys: string[]
 }
 
 export function checkMissingMonthsFor(
   list: Nota[],
   recebiveis: Recebivel[],
   prazoDias: number,
+  /** meses ("YYYY-MM") marcados como sem armazenagem: não geram alerta de cobrança */
+  semArmazenagem: (ym: string) => boolean = () => false,
 ): MissingMonthsResult {
   const effective: { sortDate: string; inferred: boolean; numero: number; periodoLabel?: string }[] = []
   list.forEach((n) => {
@@ -73,7 +78,7 @@ export function checkMissingMonthsFor(
         })
     }
   })
-  if (effective.length < 2) return { missing: [], resolved: [], overdue: [] }
+  if (effective.length < 2) return { missing: [], resolved: [], overdue: [], missingKeys: [], overdueKeys: [] }
 
   const resolved = effective
     .filter((e) => e.inferred)
@@ -85,11 +90,15 @@ export function checkMissingMonthsFor(
   const [ly, lm] = sortedKeys[sortedKeys.length - 1].split('-').map(Number)
 
   const missing: string[] = []
+  const missingKeys: string[] = []
   let y = fy
   let m = fm
   while (y < ly || (y === ly && m <= lm)) {
     const key = `${y}-${String(m).padStart(2, '0')}`
-    if (!monthsSet.has(key)) missing.push(`${MESES_LABEL[String(m).padStart(2, '0')]}/${y}`)
+    if (!monthsSet.has(key) && !semArmazenagem(key)) {
+      missing.push(`${MESES_LABEL[String(m).padStart(2, '0')]}/${y}`)
+      missingKeys.push(key)
+    }
     m++
     if (m > 12) {
       m = 1
@@ -99,6 +108,7 @@ export function checkMissingMonthsFor(
 
   // Períodos após o último conhecido, até hoje, que já passaram do prazo sem nota
   const overdue: string[] = []
+  const overdueKeys: string[] = []
   const today = new Date()
   let cy = ly
   let cm = lm
@@ -111,8 +121,12 @@ export function checkMissingMonthsFor(
     const cursorDate = new Date(cy, cm - 1, 1)
     if (cursorDate > today) break
     const deadline = deadlineForPeriodMonth(cy, cm, prazoDias)
-    if (deadline < today) overdue.push(`${MESES_LABEL[String(cm).padStart(2, '0')]}/${cy}`)
+    const key = `${cy}-${String(cm).padStart(2, '0')}`
+    if (deadline < today && !semArmazenagem(key)) {
+      overdue.push(`${MESES_LABEL[String(cm).padStart(2, '0')]}/${cy}`)
+      overdueKeys.push(key)
+    }
   }
 
-  return { missing, resolved, overdue }
+  return { missing, resolved, overdue, missingKeys, overdueKeys }
 }

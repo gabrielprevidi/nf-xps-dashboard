@@ -407,11 +407,12 @@ export async function createPausaArmazenagem(
   cnpj: string,
   parouEm: string,
   observacao: string | null,
+  retomouEm: string | null = null,
 ): Promise<void> {
   const cliente_id = await clienteIdByCnpj(cnpj)
   const { error } = await db()
     .from('pausas_armazenagem')
-    .insert({ cliente_id, parou_em: parouEm, observacao })
+    .insert({ cliente_id, parou_em: parouEm, retomou_em: retomouEm, observacao })
   if (error) throw error
 }
 

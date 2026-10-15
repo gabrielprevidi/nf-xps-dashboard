@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useData, tomadorKey } from '../state/DataContext'
 import { computeTotals } from '../domain/calc'
 import { checkMissingMonthsFor } from '../domain/prazo'
+import { mesSemArmazenagem } from '../domain/armazenagem'
 import { buildReconciliationSummaryAll } from '../domain/reconciliation'
 import { fmtBRL } from '../lib/format'
 import { KpiCard } from '../components/ui'
@@ -9,7 +10,7 @@ import { RevenueChart } from '../components/RevenueChart'
 import { AlertsPanel } from '../components/AlertsPanel'
 
 export function OverviewView() {
-  const { notas, tabNotas, recebiveis, config, tomadores, activeTomador, commissionRateFor } = useData()
+  const { notas, tabNotas, recebiveis, config, tomadores, activeTomador, commissionRateFor, pausasArmazenagem } = useData()
 
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -42,7 +43,9 @@ export function OverviewView() {
       const detail: string[] = []
       tomadores.forEach((t) => {
         const clientNotas = notas.filter((n) => tomadorKey(n) === t.key)
-        const { missing, overdue } = checkMissingMonthsFor(clientNotas, recebiveis, config.prazoDias)
+        const { missing, overdue } = checkMissingMonthsFor(clientNotas, recebiveis, config.prazoDias, (ym) =>
+          mesSemArmazenagem(pausasArmazenagem, t.key, ym),
+        )
         const combined = [...new Set([...missing, ...overdue])]
         if (combined.length) {
           count += combined.length
@@ -51,10 +54,12 @@ export function OverviewView() {
       })
       return { count, detail: detail.join(' · ') }
     }
-    const { missing, overdue } = checkMissingMonthsFor(tabNotas, recebiveis, config.prazoDias)
+    const { missing, overdue } = checkMissingMonthsFor(tabNotas, recebiveis, config.prazoDias, (ym) =>
+      mesSemArmazenagem(pausasArmazenagem, activeTomador, ym),
+    )
     const combined = [...new Set([...missing, ...overdue])]
     return { count: combined.length, detail: combined.join(', ') }
-  }, [notas, tabNotas, recebiveis, config.prazoDias, tomadores, activeTomador])
+  }, [notas, tabNotas, recebiveis, config.prazoDias, tomadores, activeTomador, pausasArmazenagem])
 
   const reconSummary = useMemo(
     () =>

@@ -8,6 +8,7 @@ import {
   mesAnterior,
   mesLabel,
   mesSeguinte,
+  mesSemArmazenagem,
   mesToDate,
   notaSemArmazenagem,
   pausaAberta,
@@ -122,5 +123,27 @@ describe('meses', () => {
       'sem armazenagem de Ago/2026 a Out/2026',
     )
     expect(pausaLabel(pausa({ parouEm: '2026-08-01' }))).toBe('sem armazenagem desde Ago/2026')
+  })
+})
+
+describe('mesSemArmazenagem / alerta de lacuna', () => {
+  const mes = pausa({ parouEm: '2026-08-01', retomouEm: '2026-09-01' })
+
+  it('cobre só o mês marcado', () => {
+    expect(mesSemArmazenagem([mes], CLIENTE, '2026-08')).toBe(true)
+    expect(mesSemArmazenagem([mes], CLIENTE, '2026-07')).toBe(false)
+    expect(mesSemArmazenagem([mes], CLIENTE, '2026-09')).toBe(false)
+    expect(mesSemArmazenagem([mes], OUTRO, '2026-08')).toBe(false)
+  })
+
+  it('mês marcado deixa de aparecer como lacuna', async () => {
+    const { checkMissingMonthsFor } = await import('../src/domain/prazo')
+    const nota = (sortDate: string, numero: number) =>
+      ({ periodoInfo: 'x', sortDate, numero }) as unknown as Nota
+    const notas = [nota('2026-07-01', 1), nota('2026-09-01', 2)]
+    expect(checkMissingMonthsFor(notas, [], 10).missingKeys).toEqual(['2026-08'])
+    expect(
+      checkMissingMonthsFor(notas, [], 10, (ym) => mesSemArmazenagem([mes], CLIENTE, ym)).missing,
+    ).toEqual([])
   })
 })

@@ -82,3 +82,14 @@ function deslocaMes(d: string, delta: number): string {
   const [ano, mes] = d.split('-').map(Number)
   return new Date(Date.UTC(ano, mes - 1 + delta, 1)).toISOString().slice(0, 10)
 }
+
+/**
+ * O mês ("YYYY-MM") cai numa pausa do cliente? Usado para não cobrar nem
+ * alertar nota de um mês em que o cliente não armazenou.
+ */
+export function mesSemArmazenagem(pausas: PausaArmazenagem[], clienteKey: string, ym: string): boolean {
+  const d = mesToDate(ym)
+  return pausasDoCliente(pausas, clienteKey).some(
+    (p) => d >= p.parouEm && (p.retomouEm === null || d < p.retomouEm),
+  )
+}

@@ -23,7 +23,7 @@ import { supabase } from '../lib/supabase'
 import * as api from '../data/api'
 import { SEED_CLIENTES, SEED_EMITENTES, SEED_NOTAS, SEED_RECEBIVEIS } from '../data/seed'
 import { normalizeCnpj } from '../lib/format'
-import { notaSemArmazenagem, pausaAberta } from '../domain/armazenagem'
+import { mesSeguinte, notaSemArmazenagem, pausaAberta } from '../domain/armazenagem'
 
 interface DataState {
   session: Session | null
@@ -78,6 +78,8 @@ interface DataState {
   pausaAbertaDe: (clienteKey: string) => PausaArmazenagem | null
   /** marca que o cliente parou de armazenar a partir de parouEm (YYYY-MM-01) */
   pausarArmazenagem: (cnpj: string, parouEm: string, observacao?: string | null) => Promise<void>
+  /** marca um único mês (YYYY-MM-01) em que o cliente não teve armazenagem */
+  marcarMesSemArmazenagem: (cnpj: string, mes: string) => Promise<void>
   /** reabre: o cliente voltou a armazenar em retomouEm (YYYY-MM-01) */
   retomarArmazenagem: (pausaId: string, retomouEm: string) => Promise<void>
   /** desfaz um registro de pausa lançado por engano */
@@ -304,6 +306,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [demoMode, reload],
   )
 
+  const marcarMesSemArmazenagem = useCallback(
+    async (cnpj: string, mes: string) => {
+      const key = normalizeCnpj(cnpj)
+      const retomouEm = mesSeguinte(mes)
+      if (demoMode) {
+        setPausasArmazenagem((prev) => [
+          { id: 'demo-pausa-' + Date.now(), clienteCnpj: key, parouEm: mes, retomouEm, observacao: null },
+          ...prev,
+        ])
+        return
+      }
+      await api.createPausaArmazenagem(cnpj, mes, null, retomouEm)
+      await reload()
+    },
+    [demoMode, reload],
+  )
+
   const retomarArmazenagem = useCallback(
     async (pausaId: string, retomouEm: string) => {
       if (!demoMode) await api.reabrirArmazenagem(pausaId, retomouEm)
@@ -441,6 +460,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     isNotaSemArmazenagem,
     pausaAbertaDe,
     pausarArmazenagem,
+    marcarMesSemArmazenagem,
     retomarArmazenagem,
     removerPausaArmazenagem,
     reload,
